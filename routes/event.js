@@ -489,7 +489,7 @@ router.get('/:eventId', async (req, res) => {
     }
 });
 // GET all web events
-router.get('/events', async (req, res) => {
+router.get('/adminEvents', async (req, res) => {
   try {
     const events = await Event.find().sort({ dateStart: -1 });
     res.status(200).json({
@@ -500,7 +500,7 @@ router.get('/events', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: 'Server Error'
+      error: 'Bakit Ayaw'
     });
   }
 });
