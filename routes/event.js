@@ -559,13 +559,123 @@ router.post('/:eventId/comments', async (req, res) => {
 
 // Kunin ang comments
 router.get('/:eventId/comments', async (req, res) => {
-    try {
-        const event = await Event.findById(req.params.eventId).populate('comments.user', 'name'); // Populate user names
-        if (!event) return res.status(404).send('Event not found');
-        res.json(event.comments);
-    } catch (error) {
-        res.status(500).json({ error: 'Error retrieving comments', details: error.message });
-    }
+  try {
+      const event = await Event.findById(req.params.eventId).populate('comments.user', 'name'); // Populate user names
+      if (!event) return res.status(404).send('Event not found');
+      res.json(event.comments);
+  } catch (error) {
+      res.status(500).json({ error: 'Error retrieving comments', details: error.message });
+  }
 });
+
+
+// Route to handle posting comments
+const MAX_COMMENT_INTERVAL = 20 * 1000; 
+const SPAM_THRESHOLD = 3;
+const COOLDOWN_PERIODS = {
+  mild: 1 * 60 * 60 * 1000,
+  moderate: 3 * 60 * 60 * 1000,
+  severe: 6 * 60 * 60 * 1000,
+};
+
+// Route to handle posting comments
+router.post('/:eventId/comments', async (req, res) => {
+  const { text, userId } = req.body;
+
+  if (!mongoose.isValidObjectId(req.params.eventId) || !mongoose.isValidObjectId(userId)) {
+      return res.status(400).send('Invalid Event or User ID');
+  }
+
+  try {
+      const event = await Event.findById(req.params.eventId);
+      if (!event) {
+          return res.status(404).send('Event not found');
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+          return res.status(404).send('User not found');
+      }
+
+      // Check if the user is currently under cooldown
+      const currentTime = new Date();
+      console.log("Current Time", currentTime)
+
+      if (user.commentCooldown && new Date(user.commentCooldown) < currentTime) {
+        user.warningCount = 0;
+        user.commentCooldown = null;
+        await user.save();
+      }
+
+      if (user.commentCooldown && currentTime < new Date(user.commentCooldown)) {
+          const timeRemaining = Math.ceil((new Date(user.commentCooldown) - currentTime) / 1000 / 60); // in minutes
+          return res.status(400).send(`You are currently under cooldown. Please wait ${timeRemaining} minutes before commenting again.`);
+      }
+
+      // Find the user's last few comments
+      const userComments = event.comments.filter(comment => comment.user.toString() === userId);
+      const lastComment = userComments[userComments.length - 1];
+
+      if (lastComment && (currentTime - new Date(lastComment.createdAt) < MAX_COMMENT_INTERVAL)) {
+          // Increment the warning count
+          user.warningCount += 1;
+          console.log("Warning Count:", user.warningCount);
+
+          // If the warning count exceeds the threshold, apply cooldown
+          if (user.warningCount >= 2) {
+              const cooldownTime = COOLDOWN_PERIODS.mild;
+              user.commentCooldown = new Date(Date.now() + cooldownTime); 
+              await user.save();
+
+              return res.status(400).send(`You are commenting too quickly. You are now blocked from commenting for ${cooldownTime / (1000 * 60)} minutes.`);
+          }
+
+          await user.save();
+          return res.status(400).send('You are commenting too quickly. Please wait a moment before posting again.');
+      }
+
+
+
+      // Check if user is spamming (same comment repeatedly)
+      const recentComments = userComments.filter(comment => (currentTime - new Date(comment.createdAt)) < MAX_COMMENT_INTERVAL);
+      const similarComments = recentComments.filter(comment => comment.text.trim() === text.trim());
+
+      if (similarComments.length >= SPAM_THRESHOLD) {
+          // Flag user for spamming and apply a cooldown period based on intensity
+          const cooldownTime = determineCooldown(recentComments.length);
+          await applyCooldown(userId, cooldownTime);
+
+          return res.status(400).send(`You are spamming comments. You are blocked from commenting for ${cooldownTime / (1000 * 60)} minutes.`);
+      }
+
+      // Add the new comment to the event
+      event.comments.push({ user: userId, text });
+      await event.save();
+
+      res.status(201).json({ message: 'Comment added successfully', comments: event.comments });
+  } catch (error) {
+      // Instead of logging the error to console, just send a generic error message to the client
+      res.status(500).json({ error: 'Error posting comment. Please try again later.' });
+  }
+});
+
+// Determine cooldown period based on the number of recent comments
+const determineCooldown = (numOfRecentComments) => {
+  if (numOfRecentComments >= 10) {
+      return COOLDOWN_PERIODS.severe; // 6 hours for severe spamming
+  } else if (numOfRecentComments >= 5) {
+      return COOLDOWN_PERIODS.moderate; // 3 hours for moderate spamming
+  } else {
+      return COOLDOWN_PERIODS.mild; // 1 hour for mild spamming
+  }
+};
+
+// Helper function to apply cooldown period to the user
+const applyCooldown = async (userId, cooldownTime) => {
+  const user = await User.findById(userId);
+  user.commentCooldown = new Date(Date.now() + cooldownTime); // Set cooldown expiration
+  user.warningCount = 0; // Reset warning count after applying cooldown
+  await user.save();
+};
 
 module.exports=router;

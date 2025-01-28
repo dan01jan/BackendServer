@@ -45,6 +45,14 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    warningCount: {
+        type: Number,
+        default: 0
+    },
+    commentCooldown: {
+        type: Date,
+        default: null,
+    }
 });
 
 userSchema.virtual('id').get(function () {
