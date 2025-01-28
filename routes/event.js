@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const cloudinary = require('../utils/cloudinary');
 const uploadOptions = require('../utils/multer');
 const streamifier = require('streamifier');
+const { captureRejectionSymbol } = require('nodemailer/lib/xoauth2');
 
 
 // const FILE_TYPE_MAP = {
@@ -64,6 +65,23 @@ router.get(`/`, async (req, res) => {
     res.status(200).json(events);
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/getEventTypeById/:type', async (req, res) => {
+  const { type } = req.params; // The _id of the eventType to search for
+  try {
+    // Search for the eventType by _id
+    const eventType = await Type.findById(type);
+    
+    if (!eventType) {
+      return res.status(404).json({ message: "Event type not found" });
+    }
+    // Return the eventType details
+    res.json({ eventType });
+    console.log("event type name:", eventType.eventType)
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching event type", error });
   }
 });
 
