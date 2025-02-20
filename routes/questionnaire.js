@@ -152,7 +152,6 @@ router.get('/', async (req, res) => {
 // });
 
 // Get Event's Behavioral Analysis Ratings
-
 router.get('/aggregated-ratings', async (req, res) => {
   try {
     const { eventId, userId } = req.query;
@@ -160,6 +159,7 @@ router.get('/aggregated-ratings', async (req, res) => {
     if (!eventId) {
       return res.status(400).json({ message: "Event ID is required." });
     }
+
     const questionnaires = await Questionnaire.find({ eventId });
     if (!questionnaires || questionnaires.length === 0) {
       return res.status(200).json({ aggregatedRatings: [], users: [] });
@@ -193,7 +193,6 @@ router.get('/aggregated-ratings', async (req, res) => {
           return;
         }
 
-        const responseTraitScores = {};
         response.questions.forEach((question) => {
           const trait = question.questionId.traitId.trait;
           const rating = question.rating;
@@ -202,22 +201,17 @@ router.get('/aggregated-ratings', async (req, res) => {
             return;
           }
 
-          if (!responseTraitScores[trait]) {
-            responseTraitScores[trait] = 0;
-          }
-          responseTraitScores[trait] += rating;
-        });
-
-        Object.keys(responseTraitScores).forEach((trait) => {
           if (!traitRatings[trait]) {
             traitRatings[trait] = { totalScore: 0, totalResponses: 0 };
           }
 
-          traitRatings[trait].totalScore += responseTraitScores[trait]/5;
+          // Accumulate the rating per trait
+          traitRatings[trait].totalScore += rating;
           traitRatings[trait].totalResponses += 1;
         });
       });
 
+    // Aggregate the results per trait
     const aggregatedRatings = Object.keys(traitRatings).map((trait) => {
       const { totalScore, totalResponses } = traitRatings[trait];
       return {
@@ -234,7 +228,6 @@ router.get('/aggregated-ratings', async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
 
 router.get('/:eventId', async (req, res) => {
     try {
