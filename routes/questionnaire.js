@@ -55,6 +55,74 @@ router.post('/create', async (req, res) => {
   }
 });
 
+// Randomize and Create Questionnaire
+router.post('/randomize-create', async (req, res) => {
+  const { eventId } = req.body;
+
+  if (!eventId) {
+    return res.status(400).json({ message: "Event ID is required" });
+  }
+
+  try {
+    // Step 1: Get all distinct traits from the database
+    const traits = await Question.distinct("traitId");
+
+    if (!traits || traits.length === 0) {
+      return res.status(404).json({ message: "No traits found" });
+    }
+
+    let selectedQuestions = [];
+
+    // Step 2: Loop through each trait and select 5 random questions
+    for (const traitId of traits) {
+      const questions = await Question.find({ traitId });
+
+      if (questions.length < 5) {
+        return res.status(400).json({
+          message: `Not enough questions for trait ${traitId}. Minimum 5 required.`,
+        });
+      }
+
+      // Shuffle and select exactly 5 questions
+      const shuffled = questions.sort(() => 0.5 - Math.random());
+      selectedQuestions.push(...shuffled.slice(0, 5));
+    }
+
+    // Extract just the question IDs
+    const selectedQuestionIds = selectedQuestions.map(q => q._id);
+
+    // Step 3: Create the Questionnaire
+    const questionnaire = new Questionnaire({
+      eventId,
+      questions: selectedQuestionIds,
+    });
+
+    const savedQuestionnaire = await questionnaire.save();
+
+    // Step 4: Update the selectedQuestion field for the chosen questions
+    await Question.updateMany(
+      { _id: { $in: selectedQuestionIds } },
+      { $set: { selectedQuestion: true } }
+    );
+
+    // Step 5: Update the hasQuestionnaire field in the Event model
+    await Event.findByIdAndUpdate(
+      eventId,
+      { $set: { hasQuestionnaire: true } },
+      { new: true }
+    );
+
+    res.status(201).json({
+      message: "Randomized questionnaire created successfully",
+      questionnaire: savedQuestionnaire,
+    });
+
+  } catch (error) {
+    console.error("Error creating randomized questionnaire:", error);
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
 
 // Get Questionnaire
 router.get('/', async (req, res) => {
