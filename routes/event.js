@@ -310,17 +310,30 @@ if (!eventType) {
   }
 });
 
-// Get Admin's Events with eventType populated (name)
+// Get logged-in user's events filtered by organization
 router.get('/adminevents', async (req, res) => {
   try {
-    const adminUsers = await User.find({ isAdmin: true });
-    const adminIds = adminUsers.map(admin => admin._id);
+    const userId = req.query.userId; // Get userId from query parameter
 
-    // Populate the `type` field with the eventType from the `Type` model
-    const events = await Event.find({ userId: { $in: adminIds } })
-      .populate('type', 'eventType');  // Populate the `type` field with the `eventType` name
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
 
-    res.status(200).send(events);
+    // Find the user to get their organization
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get the organization from the user
+    const userOrganization = user.organization;
+
+    // Find events that match the user's organization
+    const events = await Event.find({ organization: userOrganization })
+      .populate('type', 'eventType'); // Populate the `type` field with the `eventType` name
+
+    res.status(200).json(events);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
