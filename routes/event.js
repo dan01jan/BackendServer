@@ -581,6 +581,22 @@ router.get('/:eventId/comments', async (req, res) => {
   }
 });
 
+// Get overall sentiment for an event
+router.get('/:eventId/sentiment', async (req, res) => {
+  try {
+      const event = await Event.findById(req.params.eventId);
+      if (!event) return res.status(404).json({ error: 'Event not found' });
+
+      const sentimentCounts = event.comments.reduce((acc, comment) => {
+          acc[comment.sentiment] = (acc[comment.sentiment] || 0) + 1;
+          return acc;
+      }, {});
+
+      res.json({ eventId: req.params.eventId, sentimentCounts });
+  } catch (error) {
+      res.status(500).json({ error: 'Error retrieving sentiment data', details: error.message });
+  }
+});
 
 // Route to handle posting comments
 const MAX_COMMENT_INTERVAL = 20 * 1000; 
@@ -746,8 +762,6 @@ router.post('/:eventId/comments', async (req, res) => {
           await user.save();
           return res.status(400).send('You are commenting too quickly. Please wait a moment before posting again.');
       }
-
-
 
       // Check if user is spamming (same comment repeatedly)
       const recentComments = userComments.filter(comment => (currentTime - new Date(comment.createdAt)) < MAX_COMMENT_INTERVAL);
