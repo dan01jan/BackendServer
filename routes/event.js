@@ -519,22 +519,23 @@ router.get('/:eventId', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
-// GET all web events
-router.get('/adminEvents', async (req, res) => {
-  try {
-    const events = await Event.find().sort({ dateStart: -1 });
-    res.status(200).json({
-      success: true,
-      count: events.length,
-      data: events
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Bakit Ayaw'
-    });
-  }
-});
+// // GET all web events
+// router.get('/all', async (req, res) => {
+//   try {
+//     const events = await Event.find().sort({ dateStart: -1 });
+//     res.status(200).json({
+//       success: true,
+//       count: events.length,
+//       data: events
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       error: 'Bakit Ayaw'
+//     });
+//   }
+// });
+
 // Get all calendar events
 router.get('/event/events', async (req, res) => {
   try {
