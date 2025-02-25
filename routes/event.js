@@ -9,7 +9,7 @@ const uploadOptions = require('../utils/multer');
 const streamifier = require('streamifier');
 const { captureRejectionSymbol } = require('nodemailer/lib/xoauth2');
 
-
+const http = require("https");
 // const FILE_TYPE_MAP = {
 //     'image/png': 'png',
 //     'image/jpeg': 'jpeg',
@@ -586,14 +586,114 @@ router.get('/:eventId/comments', async (req, res) => {
 const MAX_COMMENT_INTERVAL = 20 * 1000; 
 const SPAM_THRESHOLD = 3;
 const COOLDOWN_PERIODS = {
-  mild: 1 * 60 * 60 * 1000,
-  moderate: 3 * 60 * 60 * 1000,
-  severe: 6 * 60 * 60 * 1000,
+  mild: 1 * 60 * 1000,
+  moderate: 5 * 60 * 1000,
+  severe: 10 * 60 * 1000,
 };
+
+const translateToEnglish = (text) => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      method: 'POST',
+      hostname: 'deep-translate1.p.rapidapi.com',
+      path: '/language/translate/v2',
+      headers: {
+        'x-rapidapi-key': '399f60b0a8msha51621c4a21e43dp1cae58jsne35e1321da38',
+        'x-rapidapi-host': 'deep-translate1.p.rapidapi.com',
+        'Content-Type': 'application/json',
+      },
+    };
+
+    const req = http.request(options, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString();
+        const result = JSON.parse(body);
+        console.log("Orig Text", text)
+      //   console.log("ano to ulit: ", result)
+        const translatedText = result.data.translations.translatedText;
+        console.log("Translated Text: ", translatedText);
+        resolve(translatedText);
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+
+    req.write(
+      JSON.stringify({
+        q: text,
+        source: 'auto',
+        target: 'en',
+      })
+    );
+    req.end();
+  });
+};
+
+const analyzeSentiment = (text) => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      method: "POST",
+      hostname: "sentiment-analysis9.p.rapidapi.com",
+      path: "/sentiment",
+      headers: {
+        "x-rapidapi-key": "98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b",
+        "x-rapidapi-host": "sentiment-analysis9.p.rapidapi.com",
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    };
+
+    const req = http.request(options, (res) => {
+      const chunks = [];
+
+      res.on("data", (chunk) => {
+        chunks.push(chunk);
+      });
+
+      res.on("end", () => {
+        const body = Buffer.concat(chunks).toString();
+        resolve(JSON.parse(body));
+      });
+    });
+
+    req.on("error", (err) => reject(err));
+
+    req.write(
+      JSON.stringify([
+        {
+          id: "1",
+          language: "en",
+          text: text,
+        },
+      ])
+    );
+    req.end();
+  });
+};
+
 
 // Route to handle posting comments
 router.post('/:eventId/comments', async (req, res) => {
   const { text, userId } = req.body;
+
+  const translatedCommentText = await translateToEnglish(text);
+    console.log("Translated Post Text:", translatedCommentText);
+
+    const sentimentResult = await analyzeSentiment(translatedCommentText);
+    console.log("Sentiment API Result:", JSON.stringify(sentimentResult, null, 2));
+
+    const predictions = sentimentResult[0]?.predictions;
+      if (!predictions || predictions.length === 0) {
+        throw new Error("No predictions found in sentiment analysis result");
+      }
+  
+      const prediction = predictions[0]?.prediction || "neutral";
+      console.log("Prediction:", prediction);
 
   if (!mongoose.isValidObjectId(req.params.eventId) || !mongoose.isValidObjectId(userId)) {
       return res.status(400).send('Invalid Event or User ID');
@@ -621,7 +721,7 @@ router.post('/:eventId/comments', async (req, res) => {
       }
 
       if (user.commentCooldown && currentTime < new Date(user.commentCooldown)) {
-          const timeRemaining = Math.ceil((new Date(user.commentCooldown) - currentTime) / 1000 / 60); // in minutes
+          const timeRemaining = Math.ceil((new Date(user.commentCooldown) - currentTime) / 1000 / 60);
           return res.status(400).send(`You are currently under cooldown. Please wait ${timeRemaining} minutes before commenting again.`);
       }
 
@@ -662,7 +762,8 @@ router.post('/:eventId/comments', async (req, res) => {
       }
 
       // Add the new comment to the event
-      event.comments.push({ user: userId, text });
+      event.comments.push({ user: userId, text, sentiment: prediction,
+      });
       await event.save();
 
       res.status(201).json({ message: 'Comment added successfully', comments: event.comments });

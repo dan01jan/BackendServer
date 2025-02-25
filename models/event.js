@@ -10,6 +10,10 @@ const commentSchema = mongoose.Schema({
       type: String,
       default: ''
     },
+    sentiment: {
+        type: String,
+        default: ''
+    },
     createdAt: {
       type: Date,
       default: Date.now
