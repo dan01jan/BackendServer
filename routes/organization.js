@@ -47,7 +47,6 @@ router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Validate if the provided ID is a valid MongoDB ObjectId
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid Organization ID' });
         }

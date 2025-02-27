@@ -31,7 +31,7 @@ const eventSchema = mongoose.Schema({
     },
     type: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Type', // Reference to the Type model
+        ref: 'Type', 
         required: true
     },
     organization: {
