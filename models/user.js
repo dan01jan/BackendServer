@@ -22,8 +22,9 @@ const userSchema = new mongoose.Schema({
         default: '' 
     },
     organization: {
-        type: String,
-        default: ''
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Organization', // Reference to the Type model
+        required: true
     },
     department: {
         type: String,
@@ -42,6 +43,10 @@ const userSchema = new mongoose.Schema({
         default: ''
     },
     isAdmin: {
+        type: Boolean,
+        default: false,
+    },
+    isOfficer: {
         type: Boolean,
         default: false,
     },

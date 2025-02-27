@@ -1,4 +1,5 @@
 const { User } = require('../models/user');
+const Organization = require('../models/organization');
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
@@ -13,30 +14,64 @@ const cloudinary = require('../utils/cloudinary');
 const uploadOptions = require('../utils/multer');
 const streamifier = require('streamifier');
 
-// const FILE_TYPE_MAP = {
-//     'image/png': 'png',
-//     'image/jpeg': 'jpeg',
-//     'image/jpg': 'jpg'
-// }; 
+// Register User
+router.post('/register', uploadOptions.single('image'), async (req, res) => {
+    console.log('Register Request Body:', req.body);
 
-// const storage = multer.diskStorage({
-//     destination: function (req, file, cb) {
-//         const isValid = FILE_TYPE_MAP[file.mimetype];
-//         let uploadError = new Error('invalid image type');
+    const file = req.file;
+    if (!file) return res.status(400).send('No image in the request');
 
-//         if (isValid) {
-//             uploadError = null;
-//         }
-//         cb(uploadError, 'public/uploads');
-//     },
-//     filename: function (req, file, cb) {
-//         const fileName = file.originalname.split(' ').join('-');
-//         const extension = FILE_TYPE_MAP[file.mimetype];
-//         cb(null, `${fileName}-${Date.now()}.${extension}`);
-//     }
-// }); 
+    try {
+        // Function to upload a single file to Cloudinary
+        const uploadSingleFile = (file) => {
+            return new Promise((resolve, reject) => {
+                cloudinary.uploader.upload_stream(
+                    { resource_type: 'image' },
+                    (error, result) => {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(result.secure_url);
+                        }
+                    }
+                ).end(file.buffer);
+            });
+        };
 
-// const uploadOptions = multer({ storage: storage });
+        const imageUrl = await uploadSingleFile(file);
+
+        let user = new User({
+            name: req.body.name,
+            surname: req.body.surname,
+            email: req.body.email,
+            passwordHash: bcrypt.hashSync(req.body.password, 10),
+            role: req.body.role,
+            organization: req.body.organization,
+            department: req.body.department,
+            image: imageUrl,
+            isAdmin: req.body.isAdmin,
+            isOfficer: req.body.isOfficer,
+            course: req.body.course,
+            section: req.body.section,
+        });
+
+        user = await user.save();
+
+        if (!user) return res.status(400).send('The user cannot be created!');
+
+        // Fetch organizations
+        const organizations = await Organization.find().select('name');
+
+        // Send response with user data and organizations
+        res.status(200).json({
+            user: user,
+            organizations: organizations
+        });
+    } catch (error) {
+        console.error('Error processing the user:', error);
+        res.status(500).send('Error processing the user: ' + error.message);
+    }
+});
 
 // Get Users
 router.get(`/`, async (req, res) => {
@@ -50,7 +85,7 @@ router.get(`/`, async (req, res) => {
     res.send(userList);
 }) 
 
-
+//User Profile (Mobile)
 router.get('/me', authJwt, async (req, res) => {
     try {
         const userId = req.user.userId; // Assuming you store userId in the JWT payload
@@ -104,39 +139,6 @@ router.get('/email/:email', async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 });
- 
-// router.put('/:id', async (req, res) => {
-
-//     const userExist = await User.findById(req.params.id);
-//     let newPassword
-//     if (req.body.password) {
-//         newPassword = bcrypt.hashSync(req.body.password, 10)
-//     } else {
-//         newPassword = userExist.passwordHash;
-//     }
-
-//     const user = await User.findByIdAndUpdate(
-//         req.params.id,
-//         {
-//             name: req.body.name,
-//             email: req.body.email,
-//             passwordHash: newPassword,
-//             phone: req.body.phone,
-//             isAdmin: req.body.isAdmin,
-//             street: req.body.street,
-//             apartment: req.body.apartment,
-//             zip: req.body.zip,
-//             city: req.body.city,
-//             country: req.body.country,
-//         },
-//         { new: true }
-//     )
-
-//     if (!user)
-//         return res.status(400).send('the user cannot be created!')
-
-//     res.send(user);
-// })
 
 // Update User (di ata to ginamit)
 router.put('/update/:id', uploadOptions.single('image'), async (req, res) => {
@@ -244,78 +246,6 @@ router.post('/login', async (req, res) => {
 
 
 })
-
-// router.post('/register', async (req, res) => {
-
-//     console.log('Register Request Body:', req.body);
-
-//     let user = new User({
-//         name: req.body.name,
-//         surname: req.body.surname,
-//         email: req.body.email,
-//         passwordHash: bcrypt.hashSync(req.body.password, 10),
-//         role: req.body.role,
-//         department: req.body.department,
-//     })
-//     user = await user.save();
-
-//     if (!user)
-//         return res.status(400).send('the user cannot be created!')
-
-//     res.send(user);
-// })
-
-// Register User
-router.post('/register', uploadOptions.single('image'), async (req, res) => {
-    console.log('Register Request Body:', req.body);
-
-    const file = req.file;
-    if (!file) return res.status(400).send('No image in the request');
-
-    try {
-        // Function to upload a single file to Cloudinary
-        const uploadSingleFile = (file) => {
-            return new Promise((resolve, reject) => {
-                cloudinary.uploader.upload_stream(
-                    { resource_type: 'image' },
-                    (error, result) => {
-                        if (error) {
-                            reject(error);
-                        } else {
-                            resolve(result.secure_url);
-                        }
-                    }
-                ).end(file.buffer);
-            });
-        };
-
-        const imageUrl = await uploadSingleFile(file);
-
-        let user = new User({
-            name: req.body.name,
-            surname: req.body.surname,
-            email: req.body.email,
-            passwordHash: bcrypt.hashSync(req.body.password, 10),
-            role: req.body.role,
-            organization: req.body.organization,
-            department: req.body.department,
-            image: imageUrl,
-            isAdmin: req.body.isAdmin,
-            course: req.body.course,
-            section: req.body.section,
-        });
-
-        user = await user.save();
-
-        if (!user) return res.status(400).send('The user cannot be created!');
-
-        res.send(user);
-    } catch (error) {
-        console.error('Error processing the user:', error);
-        res.status(500).send('Error processing the user: ' + error.message);
-    }
-});
-
 
 // Delete User (di ata to ginamit)
 router.delete('/:id', (req, res) => {

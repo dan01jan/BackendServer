@@ -28,6 +28,7 @@ const questionRoutes = require("./routes/question")
 const responseRoutes = require("./routes/response")
 const postRoutes = require("./routes/post")
 const typeRoutes = require("./routes/type")
+const organizationRoutes = require("./routes/organization")
 
 const api = process.env.API_URL;
 
@@ -41,6 +42,7 @@ app.use(`${api}/questions`, questionRoutes);
 app.use(`${api}/responses`, responseRoutes);
 app.use(`${api}/posts`, postRoutes);
 app.use(`${api}/types`, typeRoutes);
+app.use(`${api}/organizations`, organizationRoutes);
 
 app.get("/", (req, res) => {
   res.send("Server is running");

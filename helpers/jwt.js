@@ -47,6 +47,10 @@ function authJwt() {
                     url: /\/api\/v1\/posts(.*)/,
                     methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS']
                 },
+                {
+                    url: /\/api\/v1\/organizations(.*)/,
+                    methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS']
+                },
                 { url: /\/public\/uploads(.*)/, methods: ['GET']},
 
                 `${api}/users`,
