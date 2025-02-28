@@ -358,43 +358,54 @@ router.get("/image/:id", async (req, res) => {
 router.post("/weblogin", async (req, res) => {
   console.log(req.body.email);
 
-  // Find user by email
-  const user = await User.findOne({ email: req.body.email });
-
-  const secret = process.env.secret;
-
-  if (!user) {
-    return res.status(400).send("User not found");
-  }
-
-  // Compare the password with the hash
-  if (bcrypt.compareSync(req.body.password, user.passwordHash)) {
-    const token = jwt.sign(
-      {
-        userId: user.id, // User ID in the JWT payload
-      },
-      secret,
-      { expiresIn: "1d" }
+  try {
+    // Find user and populate organization name
+    const user = await User.findOne({ email: req.body.email }).populate(
+      "organization",
+      "name"
     );
-    console.log(`Login successful for user: ${user.email}, Token: ${token}`);
 
-    // Send back the user data including userId and isAdmin flag along with the token
-    return res.status(200).send({
-      user: {
-        userId: user.id, // Send userId as part of the user object
-        name: user.name,
-        surname: user.surname,
-        email: user.email,
-        organization: user.organization,
-        department: user.department,
-        course: user.course,
-        isOfficer: user.isOfficer, // Include isAdmin flag
-      },
-      token: token,
-    });
-  } else {
-    return res.status(400).send("Password is wrong!");
+    const secret = process.env.secret;
+
+    if (!user) {
+      return res.status(400).send("User not found");
+    }
+
+    // Compare the password with the hash
+    if (bcrypt.compareSync(req.body.password, user.passwordHash)) {
+      const token = jwt.sign(
+        {
+          userId: user.id, // User ID in the JWT payload
+        },
+        secret,
+        { expiresIn: "1d" }
+      );
+
+      console.log(`Login successful for user: ${user.email}, Token: ${token}`);
+
+      // Send back the user data including organization name
+      return res.status(200).send({
+        user: {
+          userId: user.id, // User ID
+          name: user.name,
+          surname: user.surname,
+          email: user.email,
+          organizationId: user.organization._id, // Organization ID
+          organizationName: user.organization.name, // Organization Name
+          department: user.department,
+          course: user.course,
+          isOfficer: user.isOfficer,
+        },
+        token: token,
+      });
+    } else {
+      return res.status(400).send("Password is wrong!");
+    }
+  } catch (error) {
+    console.error("Login error:", error);
+    return res.status(500).send("Internal server error");
   }
 });
+
 
 module.exports = router;

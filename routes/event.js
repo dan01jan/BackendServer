@@ -2,6 +2,7 @@ const express = require('express');
 const { Event } = require('../models/event');
 const { User } = require('../models/user');
 const { Type } = require('../models/type');
+const { Organization } = require('../models/type');
 const router = express.Router();
 const mongoose = require('mongoose');
 const cloudinary = require('../utils/cloudinary');
@@ -310,35 +311,25 @@ if (!eventType) {
   }
 });
 
-// Get logged-in user's events filtered by organization
-router.get('/adminevents', async (req, res) => {
+// Backend API endpoint for fetching events by organization
+router.get("/adminevents", async (req, res) => {
   try {
-    const userId = req.query.userId; // Get userId from query parameter
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+    const { organization } = req.query;
+    if (!organization) {
+      return res.status(400).json({ message: "Organization is required" });
     }
 
-    // Find the user to get their organization
-    const user = await User.findById(userId);
+    // Fetch events based on the organization and populate the 'type' field
+    const events = await Event.find({ organization: organization }) // Use 'organization' instead of 'organizationName'
+      .populate('type', 'eventType') // Populate the 'type' field, selecting only the 'eventType'
+      .lean(); // Use lean() for better performance if you don't need Mongoose document methods
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Get the organization from the user
-    const userOrganization = user.organization;
-
-    // Find events that match the user's organization
-    const events = await Event.find({ organization: userOrganization })
-      .populate('type', 'eventType'); // Populate the `type` field with the `eventType` name
-
-    res.status(200).json(events);
+    res.json(events);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
-
 
 // router.put('/:id', uploadOptions.array('images', 10), async (req, res) => {
 //     console.log(req.body);
