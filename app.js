@@ -43,6 +43,10 @@ app.use(`${api}/responses`, responseRoutes);
 app.use(`${api}/posts`, postRoutes);
 app.use(`${api}/types`, typeRoutes);
 app.use(`${api}/organizations`, organizationRoutes);
+app.use('*', (req, res) => {
+  console.log("Route not found");
+  res.status(404).json({ message: "Route not found" });
+});
 
 app.get("/", (req, res) => {
   res.send("Server is running");

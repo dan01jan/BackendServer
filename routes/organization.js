@@ -1,19 +1,17 @@
 const express = require('express');
-const Organization = require('../models/organization'); // Corrected import
+const mongoose = require('mongoose');  // Import mongoose
+const Organization = require('../models/organization');
 const router = express.Router();
 
 // Create Organization
 router.post(`/`, async (req, res) => {
     try {
-        // Extract data from request body
         const { name, description } = req.body;
 
-        // Validate required fields
         if (!name || !description) {
             return res.status(400).json({ message: "Name and description are required" });
         }
 
-        // Create and save organization
         const organization = new Organization({
             name,
             description,
@@ -31,10 +29,7 @@ router.post(`/`, async (req, res) => {
 // Get All Organizations
 router.get('/', async (req, res) => {
     try {
-        // Fetch all organizations from the database
         const organizations = await Organization.find();
-
-        // Return the list of organizations
         res.status(200).json(organizations);
     } catch (error) {
         console.error('Error fetching organizations:', error);
@@ -45,25 +40,36 @@ router.get('/', async (req, res) => {
 // Get Organization by ID
 router.get('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({ message: 'Invalid Organization ID' });
-        }
-
-        // Find the organization by ID
-        const organization = await Organization.findById(id);
-
-        if (!organization) {
-            return res.status(404).json({ message: 'Organization not found' });
-        }
-
-        res.status(200).json(organization);
+      const { id } = req.params;
+  
+      console.log("Received request to fetch organization with ID:", id); // Log the received ID
+  
+      // Check if the provided ID is a valid MongoDB ObjectId
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        console.error("Invalid Organization ID:", id); // Log invalid ID
+        return res.status(400).json({ message: 'Invalid Organization ID' });
+      }
+  
+      // Fetch the organization by its ID
+      const organization = await Organization.findById(id);
+  
+      if (!organization) {
+        console.error("Organization not found for ID:", id); // Log when organization is not found
+        return res.status(404).json({ message: 'Organization not found' });
+      }
+  
+      // Log specific details of the organization
+      console.log("Organization Details:");
+      console.log("Name:", organization.name); // Log the organization's name
+      console.log("Description:", organization.description); // Log the organization's description
+      console.log("Image:", organization.image); // Log the organization's image (if any)
+      console.log("Other Details:", organization); // Log the entire organization object for all available details
+  
+      res.status(200).json(organization); // Send the organization data in the response
     } catch (error) {
-        console.error('Error fetching organization:', error);
-        res.status(500).json({ message: 'Error fetching organization', error: error.message });
+      console.error('Error fetching organization:', error); // Log any unexpected errors
+      res.status(500).json({ message: 'Error fetching organization', error: error.message });
     }
 });
-
 
 module.exports = router;
