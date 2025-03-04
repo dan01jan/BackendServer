@@ -1,32 +1,89 @@
 const express = require('express');
 const mongoose = require('mongoose');  // Import mongoose
 const Organization = require('../models/organization');
+const cloudinary = require('../utils/cloudinary');
+const uploadOptions = require('../utils/multer');
+const streamifier = require('streamifier');
 const router = express.Router();
 
-router.post(`/`, async (req, res) => {
-    try {
-        const { name, description, department, image, officers } = req.body;
-
-        if (!name || !description || !department) {
-            return res.status(400).json({ message: "Name, description, and department are required" });
-        }
-
-        const organization = new Organization({
-            name,
-            description,
-            department,
-            image,
-            officers
-        });
-
-        const savedOrganization = await organization.save();
-        res.status(201).json(savedOrganization);
-
-    } catch (error) {
-        console.error('Error creating organization:', error);
-        res.status(500).json({ message: 'Error creating organization', error: error.message });
+// Department Mapping Function
+const getDepartment = (selectedOrganization) => {
+    switch (selectedOrganization) {
+      case "ACES":
+      case "GreeCS":
+        return "CAAD";
+      case "TEST":
+        return "BASD";
+      case "BSEEG":
+      case "IECEP":
+      case "ICS":
+      case "MTICS":
+      case "MRSP":
+        return "EAAD";
+      case "ASE":
+      case "DMMS":
+      case "EleMechS":
+      case "JPSME":
+      case "JSHRAE":
+      case "METALS":
+      case "TSNT":
+        return "MAAD";
+      default:
+        return "";
     }
-});
+  };
+
+// Create Organization Route with Image Upload
+router.post('/', uploadOptions.single('image'), async (req, res) => {
+    try {
+        const { name, description, officers } = req.body;
+
+        if (!name || !description) {
+          return res.status(400).json({ message: "Name and description are required" });
+        }
+        
+        // Determine department based on the organization name
+        const department = getDepartment(name);
+        
+        if (!department) {
+          return res.status(400).json({ message: "Invalid organization name. Cannot determine department." });
+        }        
+  
+      // Upload image to Cloudinary
+      let imageUrl = "";
+      if (req.file) {
+        const result = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { resource_type: 'image' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result.secure_url);
+            }
+          );
+          streamifier.createReadStream(req.file.buffer).pipe(stream);
+        });
+  
+        imageUrl = result; // Cloudinary Image URL
+      }
+  
+      // Create new organization
+      const organization = new Organization({
+        name,
+        description,
+        department,
+        image: imageUrl,
+        officers
+      });
+  
+      const savedOrganization = await organization.save();
+      res.status(201).json(savedOrganization);
+    } catch (error) {
+      console.error('Error creating organization:', error);
+      res.status(500).json({ message: 'Error creating organization', error: error.message });
+    }
+  });
+  
+  module.exports = router;
 
 // Get All Organizations
 router.get('/', async (req, res) => {

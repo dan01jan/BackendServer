@@ -92,34 +92,6 @@ router.post(`/`, uploadOptions.array('images', 10), async (req, res) => {
 
     const files = req.files;
     if (!files || files.length === 0) return res.status(400).send('No images in the request');
-
-    // normal create
-    // const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
-
-    // const images = files.map(file => `${basePath}${file.filename}`);
-
-    // const event = new Event({
-    //     name: req.body.name,
-    //     description: req.body.description,
-    //     type: req.body.type,
-    //     organization: req.body.organization,
-    //     department: req.body.department,
-    //     dateStart: req.body.dateStart,
-    //     dateEnd: req.body.dateEnd,
-    //     location: req.body.location,
-    //     images: images, 
-    //     userId: req.body.userID,
-    // });
-   
-    // try {
-    //     const savedEvent = await event.save();
-
-    //     if (!savedEvent) return res.status(500).send('The event cannot be created');
-
-    //     res.send(savedEvent);
-    // } catch (error) {
-    //     res.status(500).send('Error saving the event: ' + error.message);
-    // }
     try {
         // Upload images to Cloudinary and get the URLs
         const uploadPromises = files.map(file => {
