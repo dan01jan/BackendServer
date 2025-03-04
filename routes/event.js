@@ -331,6 +331,25 @@ router.get("/adminevents", async (req, res) => {
   }
 });
 
+// Backend API endpoint for getting the total number of events per organization
+router.get("/event-count", async (req, res) => {
+  try {
+    const eventCounts = await Event.aggregate([
+      {
+        $group: {
+          _id: "$organization", // Group by organization
+          totalEvents: { $sum: 1 }, // Count the number of events per organization
+        },
+      },
+    ]);
+
+    res.json(eventCounts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // router.put('/:id', uploadOptions.array('images', 10), async (req, res) => {
 //     console.log(req.body);
 //     if (!mongoose.isValidObjectId(req.params.id)) {

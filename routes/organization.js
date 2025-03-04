@@ -3,18 +3,20 @@ const mongoose = require('mongoose');  // Import mongoose
 const Organization = require('../models/organization');
 const router = express.Router();
 
-// Create Organization
 router.post(`/`, async (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { name, description, department, image, officers } = req.body;
 
-        if (!name || !description) {
-            return res.status(400).json({ message: "Name and description are required" });
+        if (!name || !description || !department) {
+            return res.status(400).json({ message: "Name, description, and department are required" });
         }
 
         const organization = new Organization({
             name,
             description,
+            department,
+            image,
+            officers
         });
 
         const savedOrganization = await organization.save();
