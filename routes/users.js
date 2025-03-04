@@ -17,26 +17,29 @@ const uploadOptions = require("../utils/multer");
 const streamifier = require("streamifier");
 
 // Get Admin Users
-router.get('/officer/:id', async (req, res) => {
-    try {
-        const userId = req.params.id; // Get userId from URL parameter
-        const officer = await User.findById(userId).select('-passwordHash').populate('organization', 'name');
+router.get("/officer/:id", async (req, res) => {
+  try {
+    const userId = req.params.id; // Get userId from URL parameter
+    const officer = await User.findById(userId)
+      .select("-passwordHash")
+      .populate("organization", "name");
 
-        if (!officer) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-
-        if (!officer.isOfficer) {
-            return res.status(403).json({ success: false, message: 'Access denied' });
-        }
-
-        res.status(200).json(officer);
-    } catch (error) {
-        console.error('Error fetching admin user:', error);
-        res.status(500).json({ message: 'Server error' });
+    if (!officer) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
-});
 
+    if (!officer.isOfficer) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    res.status(200).json(officer);
+  } catch (error) {
+    console.error("Error fetching admin user:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // Register User
 router.post("/register", uploadOptions.single("image"), async (req, res) => {
@@ -228,6 +231,7 @@ router.put("/:id", async (req, res) => {
         // passwordHash: newPassword,
         // phone: req.body.phone,
         isOfficer: req.body.isOfficer,
+        // isAdmin: req.body.isAdmin,
         // street: req.body.street,
         // apartment: req.body.apartment,
         // zip: req.body.zip,
@@ -394,6 +398,8 @@ router.post("/weblogin", async (req, res) => {
           organizationName: user.organization.name, // Organization Name
           department: user.department,
           course: user.course,
+          image:user.image,
+          isAdmin: user.isAdmin,
           isOfficer: user.isOfficer,
         },
         token: token,
@@ -406,6 +412,5 @@ router.post("/weblogin", async (req, res) => {
     return res.status(500).send("Internal server error");
   }
 });
-
 
 module.exports = router;
