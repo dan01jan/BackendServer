@@ -69,6 +69,15 @@ router.get(`/`, async (req, res) => {
   }
 });
 
+router.get('/events', async (req, res) => {
+  try {
+      const events = await Event.find().populate('type').populate('userId', 'name');
+      res.json(events);
+  } catch (error) {
+      res.status(500).json({ message: 'Error fetching events', error });
+  }
+});
+
 router.get('/getEventTypeById/:type', async (req, res) => {
   const { type } = req.params; // The _id of the eventType to search for
   try {
