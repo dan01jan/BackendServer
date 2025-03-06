@@ -307,5 +307,15 @@ router.patch('/:id/officers', uploadOptions.any(), async (req, res) => {
   }
 });
 
+// Get the total number of Organizations
+router.get('/get/count', async (req, res) => {
+  try {
+    const orgCount = await Organization.countDocuments();
+    res.status(200).json({ orgCount });
+  } catch (error) {
+    console.error('Error fetching organization count:', error);
+    res.status(500).json({ message: 'Error fetching organization count', error: error.message });
+  }
+});
 
 module.exports = router;

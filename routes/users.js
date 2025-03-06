@@ -481,5 +481,19 @@ router.put('/organizations/officers/:userId/approve', async (req, res) => {
   }
 });
 
+// Route to get the total number of users for a specific organization
+router.get("/organization/:id/count", async (req, res) => {
+  try {
+    const orgId = req.params.id;
+
+    // Count users whose organization field matches the provided orgId
+    const userCount = await User.countDocuments({ organization: orgId });
+
+    res.status(200).json({ organizationId: orgId, userCount });
+  } catch (error) {
+    console.error("Error counting users for organization:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 module.exports = router;
