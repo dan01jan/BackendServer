@@ -413,4 +413,73 @@ router.post("/weblogin", async (req, res) => {
   }
 });
 
+// Get Officer Role
+router.get('/organizations/officers', async (req, res) => {
+  try {
+    const organizationsWithOfficers = await Organization.aggregate([
+      {
+        $lookup: {
+          from: "users", // ensure this matches your collection name
+          localField: "_id",
+          foreignField: "organization",
+          as: "users"
+        }
+      },
+      {
+        $addFields: {
+          officers: {
+            $filter: {
+              input: "$users",
+              as: "user",
+              cond: {
+                $and: [
+                  { $eq: [{ $toLower: "$$user.role" }, "officer"] },
+                  { $eq: ["$$user.isOfficer", false] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          name: 1,       // organization name
+          officers: 1
+        }
+      }
+    ]);
+
+    res.json(organizationsWithOfficers);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/organizations/officers/:userId/approve', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find the user by ID and update isOfficer to true.
+    const updatedOfficer = await User.findByIdAndUpdate(
+      userId,
+      { isOfficer: true },
+      { new: true }
+    );
+
+    if (!updatedOfficer) {
+      return res.status(404).json({ error: 'Officer not found.' });
+    }
+
+    res.json({
+      message: 'Officer approved successfully.',
+      officer: updatedOfficer
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 module.exports = router;

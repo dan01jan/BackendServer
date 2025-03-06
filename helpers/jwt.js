@@ -52,6 +52,10 @@ function authJwt() {
                     methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS']
                 },
                 { url: /\/public\/uploads(.*)/, methods: ['GET']},
+                {
+                    url: new RegExp(`${api}/users/organizations/officers/[a-fA-F0-9]{24}/approve`),
+                    methods: ['PUT']
+                },
 
                 `${api}/users`,
                 `${api}/users/login`,
@@ -60,6 +64,8 @@ function authJwt() {
                 `${api}/users/register`,
                 `${api}/users/update/:id`, 
                 `${api}/users/:id`,
+                `${api}/users/organizations/officers`,
+                //`${api}/users/organizations/officers/:userId/approve`
             ]
         })
 }
