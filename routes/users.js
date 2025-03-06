@@ -496,4 +496,24 @@ router.get("/organization/:id/count", async (req, res) => {
   }
 });
 
+// Route to count officer users (role "officer" and isOfficer = true) for a specific organization
+router.get("/organization/:id/officers/count", async (req, res) => {
+  try {
+    const orgId = req.params.id;
+
+    // Count users whose organization field matches orgId,
+    // role is "officer" (case-insensitive) and isOfficer is true
+    const officerCount = await User.countDocuments({
+      organization: orgId,
+      role: { $regex: /^officer$/i },
+      isOfficer: true
+    });
+
+    res.status(200).json({ organizationId: orgId, officerCount });
+  } catch (error) {
+    console.error("Error counting officer users for organization:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;

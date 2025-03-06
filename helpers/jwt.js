@@ -66,6 +66,7 @@ function authJwt() {
                 `${api}/users/:id`,
                 `${api}/users/organizations/officers`,
                 `${api}/users/organization/:id/count`,
+                `${api}/users/organization/:id/officers/count`,
                 //`${api}/users/organizations/officers/:userId/approve`
             ]
         })
