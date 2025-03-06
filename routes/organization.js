@@ -8,30 +8,49 @@ const router = express.Router();
 
 // Department Mapping Function
 const getDepartment = (selectedOrganization) => {
-    switch (selectedOrganization) {
-      case "ACES":
-      case "Association of Civil Engineering Students of TUP Taguig Campus":
-      case "GreeCS":
-        return "CAAD";
-      case "TEST":
-        return "BASD";
-      case "BSEEG":
-      case "IECEP":
-      case "ICS":
-      case "MTICS":
-      case "MRSP":
-        return "EAAD";
-      case "ASE":
-      case "DMMS":
-      case "EleMechS":
-      case "JPSME":
-      case "JSHRAE":
-      case "METALS":
-      case "TSNT":
-        return "MAAD";
-      default:
-        return "";
-    }
+  switch (selectedOrganization) {
+    case "ACES":
+    case "Association of Civil Engineering Students of TUP Taguig Campus":
+    case "GreeCS":
+    case "Green Chemistry Society TUP - Taguig":
+      return "Civil and Allied Department";
+  
+    case "TEST":
+    case "Technical Educators Society – TUP Taguig":
+      return "Basic Arts and Sciences Department";
+  
+    case "BSEEG":
+    case "Bachelor of Science in Electrical Engineering Guild":
+    case "IECEP":
+    case "Institute of Electronics Engineers of the Philippines – TUPT Student Chapter":
+    case "ICS":
+    case "Instrumentation and Control Society – TUPT Student Chapter":
+    case "MTICS":
+    case "Manila Technician Institute Computer Society":
+    case "MRSP":
+    case "Mechatronics and Robotics Society of the Philippines Taguig Student Chapter":
+      return "Electrical and Allied Department";
+  
+    case "ASE":
+    case "Automotive Society of Engineering":
+    case "DMMS":
+    case "Die and Mould Maker Society – TUP Taguig":
+    case "EleMechS":
+    case "Electromechanics Society":
+    case "JPSME":
+    case "Junior Philippine Society of Mechanical Engineers":
+    case "JSHRAE":
+    case "Junior Society of Heating, Refrigeration and Air Conditioning Engineers":
+    case "METALS":
+    case "Mechanical Technologies and Leader’s Society":
+    case "TSNT":
+    case "TUP Taguig Society of Nondestructive Testing":
+      return "Mechanical and Allied Department";
+  
+    default:
+      return "";
+  }
+  
   };
 
 // Create Organization Route with Image Upload
