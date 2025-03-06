@@ -49,7 +49,7 @@ function authJwt() {
                 },
                 {
                     url: /\/api\/v1\/organizations(.*)/,
-                    methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS']
+                    methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS', 'PATCH']
                 },
                 { url: /\/public\/uploads(.*)/, methods: ['GET']},
                 {

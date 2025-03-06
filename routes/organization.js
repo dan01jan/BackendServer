@@ -102,8 +102,7 @@ router.post('/', uploadOptions.single('image'), async (req, res) => {
       res.status(500).json({ message: 'Error creating organization', error: error.message });
     }
   });
-  
-  module.exports = router;
+
 
 // Get All Organizations
 router.get('/', async (req, res) => {
@@ -251,5 +250,62 @@ router.delete('/:id', async (req, res) => {
       res.status(500).json({ message: 'Error deleting organization', error: error.message });
   }
 });
+
+// Route to update and delete officers only
+router.patch('/:id/officers', uploadOptions.any(), async (req, res) => {
+  try {
+    const organizationId = req.params.id;
+    // Check if req.body.officers is a string (from FormData) or already an object (from JSON)
+    const officersData = typeof req.body.officers === 'string'
+      ? JSON.parse(req.body.officers)
+      : req.body.officers;
+    
+    // Build a map from file field names to file objects from req.files.
+    const filesMap = {};
+    if (req.files) {
+      req.files.forEach(file => {
+        filesMap[file.fieldname] = file;
+      });
+    }
+
+    // For each officer, if a file is uploaded for that officer (e.g. field "image_0" for first officer),
+    // upload the file to Cloudinary and replace the image field with the secure URL.
+    const processedOfficers = await Promise.all(
+      officersData.map(async (officer, index) => {
+        const fileField = `image_${index}`;
+        if (filesMap[fileField]) {
+          const file = filesMap[fileField];
+          const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { resource_type: 'image' },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            streamifier.createReadStream(file.buffer).pipe(stream);
+          });
+          officer.image = result.secure_url;
+        }
+        return officer;
+      })
+    );
+
+    // Update the organization with the processed officers array.
+    const updatedOrganization = await Organization.findByIdAndUpdate(
+      organizationId,
+      { officers: processedOfficers },
+      { new: true }
+    );
+    if (!updatedOrganization) {
+      return res.status(404).json({ message: 'Organization not found.' });
+    }
+    res.status(200).json(updatedOrganization);
+  } catch (error) {
+    console.error('Error updating officers:', error);
+    res.status(500).json({ message: 'Error updating officers', error: error.message });
+  }
+});
+
 
 module.exports = router;
