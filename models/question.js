@@ -5,6 +5,10 @@ const questionSchema = mongoose.Schema({
         type: String, 
         required: true 
     },
+    translated: { 
+        type: String, 
+        required: true 
+    },
     scale: { 
         type: [Number], 
         required: true 
