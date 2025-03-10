@@ -39,7 +39,7 @@ const translateToEnglish = (feedback) => {
           const result = JSON.parse(body);
           console.log("Orig Text", feedback)
         //   console.log("ano to ulit: ", result)
-          const translatedText = result.data.translations.translatedText;
+          const translatedText = result.data.translations.translatedText[0];
           console.log("Translated Text: ", translatedText);
           resolve(translatedText);
         });
