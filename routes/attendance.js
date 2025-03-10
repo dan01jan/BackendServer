@@ -19,17 +19,40 @@ router.get('/check-registration', async (req, res) => {
             return res.status(200).json({
                 isRegistered: true, 
                 hasAttended: registration.hasAttended,  
+                hasRegistered: registration.hasRegistered,
             });
         } else {
             return res.status(200).json({
                 isRegistered: false, 
                 hasAttended: false,
+                hasRegistered: false,
             });
         }
 
     } catch (error) {
         console.error('Error checking registration:', error);
         return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.put('/attend', async (req, res) => {
+    try {
+        const { userId, eventId } = req.body;
+
+        // Find the attendance record
+        const attendance = await Attendance.findOne({ userId, eventId });
+
+        if (!attendance) {
+            return res.status(404).json({ message: 'Attendance record not found' });
+        }
+
+        // Update hasAttended to true
+        attendance.hasAttended = true;
+        await attendance.save();
+
+        res.status(200).json({ message: 'Attendance marked as attended', attendance });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating attendance', error });
     }
 });
 
@@ -102,6 +125,7 @@ router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
                 department: user.department,
                 section: user.section,
                 hasAttended: attendance ? attendance.hasAttended : false,
+                hasRegistered: attendance ? attendance.hasRegistered : false,
                 dateRegistered: attendance ? attendance.dateRegistered : null,
 
             };
@@ -131,11 +155,11 @@ router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
         }
 
         for (const user of users) {
-            const { userId, hasAttended } = user;
+            const { userId, hasRegistered } = user;
 
             const attendance = await Attendance.findOneAndUpdate(
                 { userId, eventId: selectedEvent }, 
-                { $set: { hasAttended } },
+                { $set: { hasRegistered } },
                 { new: true }
             );
 

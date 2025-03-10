@@ -296,6 +296,7 @@ if (!eventType) {
 router.get("/adminevents", async (req, res) => {
   try {
     const { organization } = req.query;
+    console.log('anong org:',organization)
     if (!organization) {
       return res.status(400).json({ message: "Organization is required" });
     }
@@ -306,6 +307,7 @@ router.get("/adminevents", async (req, res) => {
       .lean(); // Use lean() for better performance if you don't need Mongoose document methods
 
     res.json(events);
+    console.log("events ni org:", events);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal server error" });
