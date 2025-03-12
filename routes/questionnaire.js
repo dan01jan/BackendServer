@@ -151,6 +151,16 @@ router.get('/', async (req, res) => {
 //   }
 // });
 
+// Helper function to generate a deterministic hash from a string
+const getDeterministicIndex = (str, arrayLength) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash) % arrayLength;
+};
+
 // Get Event's Behavioral Analysis Ratings
 router.get('/aggregated-ratings', async (req, res) => {
   try {
@@ -186,7 +196,7 @@ router.get('/aggregated-ratings', async (req, res) => {
 
     const traitRatings = {};
     responses
-      .filter(response => !userId || response.userId.toString() === userId.toString())  // If no userId, return ratings for all users
+      .filter(response => !userId || response.userId.toString() === userId.toString()) // If no userId, return ratings for all users
       .forEach((response) => {
         if (!response.questions) {
           return;
@@ -234,9 +244,6 @@ router.get('/aggregated-ratings', async (req, res) => {
       else if (rating < 2.5) return "Low";
       else return "Moderate";
     };
-
-    // Helper function: randomly select an element from an array
-    const getRandomElement = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
     // Expanded dictionary for trait-specific interpretations
     const traitInterpretations = {
@@ -392,29 +399,46 @@ router.get('/aggregated-ratings', async (req, res) => {
       ]
     };
 
-    // Add an interpretation and level for each trait rating
+    // For each trait, choose an interpretation deterministically based on the userId.
+    // If userId is provided, combine it with trait and level to calculate an index.
+    // Otherwise, default to the first interpretation.
     const ratingsWithInterpretation = aggregatedRatings.map(item => {
       const level = getLevel(item.averageRating);
-      const interpretation = (traitInterpretations[item.trait] &&
-                              traitInterpretations[item.trait][level])
-          ? getRandomElement(traitInterpretations[item.trait][level])
-          : "No interpretation available.";
+      let interpretation = "No interpretation available.";
+      if (
+        traitInterpretations[item.trait] &&
+        traitInterpretations[item.trait][level] &&
+        traitInterpretations[item.trait][level].length > 0
+      ) {
+        if (userId) {
+          const index = getDeterministicIndex(userId.toString() + item.trait + level, traitInterpretations[item.trait][level].length);
+          interpretation = traitInterpretations[item.trait][level][index];
+        } else {
+          interpretation = traitInterpretations[item.trait][level][0];
+        }
+      }
       return { ...item, level, interpretation };
     });
 
     // Compute overall average rating (across all traits) for an overall interpretation
     const overallAvg = aggregatedRatings.reduce((sum, item) => sum + item.averageRating, 0) / aggregatedRatings.length;
     const overallLevel = getLevel(overallAvg);
-    const overallInterpretation = overallInterpretations[overallLevel]
-      ? getRandomElement(overallInterpretations[overallLevel])
-      : "No overall interpretation available.";
+    let overallInterpretationResult = "No overall interpretation available.";
+    if (overallInterpretations[overallLevel] && overallInterpretations[overallLevel].length > 0) {
+      if (userId) {
+        const index = getDeterministicIndex(userId.toString() + "overall" + overallLevel, overallInterpretations[overallLevel].length);
+        overallInterpretationResult = overallInterpretations[overallLevel][index];
+      } else {
+        overallInterpretationResult = overallInterpretations[overallLevel][0];
+      }
+    }
 
     // Return the aggregated ratings (with interpretations), users, userInfo, and overall interpretation
     res.status(200).json({ 
       aggregatedRatings: ratingsWithInterpretation, 
       users, 
       userInfo, 
-      overallInterpretation 
+      overallInterpretation: overallInterpretationResult
     });
 
   } catch (error) {
@@ -422,7 +446,6 @@ router.get('/aggregated-ratings', async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
 
 
 router.get('/:eventId', async (req, res) => {
