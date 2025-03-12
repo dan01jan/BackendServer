@@ -291,16 +291,21 @@ router.patch('/:id/officers', uploadOptions.any(), async (req, res) => {
       })
     );
 
-    // Update the organization with the processed officers array.
+    // Update the organization with the processed officers array. 
     const updatedOrganization = await Organization.findByIdAndUpdate(
       organizationId,
       { officers: processedOfficers },
       { new: true }
-    );
+    ).select('officers image'); // Select officers and image fields
+
     if (!updatedOrganization) {
       return res.status(404).json({ message: 'Organization not found.' });
     }
-    res.status(200).json(updatedOrganization);
+
+    res.status(200).json({
+      officers: updatedOrganization.officers,
+      image: updatedOrganization.image
+    });
   } catch (error) {
     console.error('Error updating officers:', error);
     res.status(500).json({ message: 'Error updating officers', error: error.message });
