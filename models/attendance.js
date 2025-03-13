@@ -20,12 +20,16 @@ const attendanceSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    hasRegistered: {
+        type: Boolean,
+        default: false
+    },
 });
 
 attendanceSchema.virtual('id').get(function () {
     return this._id.toHexString();
 });
-
+ 
 attendanceSchema.set('toJSON', {
     virtuals: true,
 });
