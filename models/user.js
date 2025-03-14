@@ -54,6 +54,7 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    declined: { type: Boolean, default: false },
     warningCount: {
         type: Number,
         default: 0

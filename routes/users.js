@@ -434,7 +434,8 @@ router.get('/organizations/officers', async (req, res) => {
               cond: {
                 $and: [
                   { $eq: [{ $toLower: "$$user.role" }, "officer"] },
-                  { $eq: ["$$user.isOfficer", false] }
+                  { $eq: ["$$user.isOfficer", false] },
+                  { $eq: ["$$user.declined", false] }
                 ]
               }
             }
@@ -455,6 +456,31 @@ router.get('/organizations/officers', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+router.put('/organizations/officers/:userId/decline', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Set declined to true so that the user is removed from pending list.
+    const updatedOfficer = await User.findByIdAndUpdate(
+      userId,
+      { declined: true },
+      { new: true }
+    );
+
+    if (!updatedOfficer) {
+      return res.status(404).json({ error: 'Officer not found.' });
+    }
+
+    res.json({
+      message: 'Officer declined successfully.',
+      officer: updatedOfficer
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 
 router.put('/organizations/officers/:userId/approve', async (req, res) => {
   try {
