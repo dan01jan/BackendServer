@@ -55,7 +55,11 @@ function authJwt() {
                 {
                     url: new RegExp(`${api}/users/organizations/officers/[a-fA-F0-9]{24}/(approve|decline)`),
                     methods: ['PUT']
-                },
+                  },
+                // {
+                //     url: new RegExp(`${api}/users/organizations/officers/[a-fA-F0-9]{24}/approve`),
+                //     methods: ['PUT']
+                // },
 
                 `${api}/users`,
                 `${api}/users/login`,
@@ -67,6 +71,8 @@ function authJwt() {
                 `${api}/users/organizations/officers`,
                 `${api}/users/organization/:id/count`,
                 `${api}/users/organization/:id/officers/count`,
+                //`${api}/users/organizations/officers/:userId/approve`,
+                //`${api}/users/organizations/officers/:userId/approve`
             ]
         })
 }

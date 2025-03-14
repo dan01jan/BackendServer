@@ -78,6 +78,7 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
       isAdmin: req.body.isAdmin,
       isOfficer: req.body.isOfficer,
       isHead: req.body.isHead,
+      declined: req.body.declined,
       course: req.body.course,
       section: req.body.section,
     });
