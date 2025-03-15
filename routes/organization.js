@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');  // Import mongoose
 const Organization = require('../models/organization');
+const { User } = require('../models/user');
 const cloudinary = require('../utils/cloudinary');
 const uploadOptions = require('../utils/multer');
 const streamifier = require('streamifier');
@@ -113,6 +114,31 @@ router.get('/', async (req, res) => {
         console.error('Error fetching organizations:', error);
         res.status(500).json({ message: 'Error fetching organizations', error: error.message });
     }
+});
+
+router.get("/eligible-officers/:organizationId", async (req, res) => {
+  try {
+    const { organizationId } = req.params;
+    console.log("Received Organization ID:", organizationId); // Debugging
+
+    // Ensure organizationId is valid
+    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
+      return res.status(400).json({ message: "Invalid organization ID" });
+    }
+
+    // Fetch users with the given organizationId
+    const users = await User.find({
+      organization: new mongoose.Types.ObjectId(organizationId), // Convert to ObjectId
+      isOfficer: true,
+      declined: false,
+    });
+
+    console.log("Found Officers:", users); // Debugging
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error fetching officers:", error.message); // Log error
+    res.status(500).json({ message: "Error fetching officers", error: error.message });
+  }
 });
 
 // Get Organization by ID

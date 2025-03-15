@@ -18,6 +18,11 @@ const organizationSchema = new mongoose.Schema({
         default: ''
     },
     officers: [{
+        userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
+        },
         name: {
             type: String,
             required: false
