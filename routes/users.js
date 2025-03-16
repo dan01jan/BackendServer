@@ -19,10 +19,10 @@ const streamifier = require("streamifier");
 // Register User
 router.post("/register", uploadOptions.single("image"), async (req, res) => {
    // Check if the email is a TUP email
-   if (!req.body.email.endsWith('@tup.edu.ph')) {
-    return res.status(400).send("Email must be a TUP email (ending with @tup.edu.ph)");
-  }
-  console.log("Register Request Body:", req.body);
+  //  if (!req.body.email.endsWith('@tup.edu.ph')) {
+  //   return res.status(400).send("Email must be a TUP email (ending with @tup.edu.ph)");
+  // }
+  // console.log("Register Request Body:", req.body);
 
   const file = req.file;
   if (!file) return res.status(400).send("No image in the request");
