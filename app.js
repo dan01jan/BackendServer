@@ -7,6 +7,8 @@ const authJwt = require('./helpers/jwt');
 const errorHandler = require('./helpers/error-handler');
 require("dotenv/config");
 
+// process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 app.use(cors());
 app.options("*", cors());
 

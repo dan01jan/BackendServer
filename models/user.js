@@ -62,7 +62,12 @@ const userSchema = new mongoose.Schema({
     commentCooldown: {
         type: Date,
         default: null,
-    }
+    },
+    // isVerified: {
+    //     type: Boolean,
+    //     default: false,
+    //   },
+      
 });
 
 userSchema.virtual('id').get(function () {

@@ -16,33 +16,12 @@ const cloudinary = require("../utils/cloudinary");
 const uploadOptions = require("../utils/multer");
 const streamifier = require("streamifier");
 
-// Get Admin Users
-router.get("/officer/:id", async (req, res) => {
-  try {
-    const userId = req.params.id; // Get userId from URL parameter
-    const officer = await User.findById(userId)
-      .select("-passwordHash")
-      .populate("organization", "name");
-
-    if (!officer) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
-    }
-
-    if (!officer.isOfficer) {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-
-    res.status(200).json(officer);
-  } catch (error) {
-    console.error("Error fetching admin user:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
 // Register User
 router.post("/register", uploadOptions.single("image"), async (req, res) => {
+   // Check if the email is a TUP email
+   if (!req.body.email.endsWith('@tup.edu.ph')) {
+    return res.status(400).send("Email must be a TUP email (ending with @tup.edu.ph)");
+  }
   console.log("Register Request Body:", req.body);
 
   const file = req.file;
@@ -87,6 +66,41 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
 
     if (!user) return res.status(400).send("The user cannot be created!");
 
+    //  // Generate a verification token using JWT
+    // const verificationToken = jwt.sign(
+    //   { userId: user._id },
+    //   process.env.JWT_SECRET,
+    //   { expiresIn: '1d' }
+    // );
+
+    // // Construct the verification link
+    // const verificationLink = `${process.env.BASE_URL}users/verify/${verificationToken}`;
+
+    // // Set up Nodemailer transporter using Gmail's SMTP
+    // let transporter = nodemailer.createTransport({
+    //   service: "gmail",
+    //   auth: {
+    //     user: process.env.EMAIL_USER, // From your .env
+    //     pass: process.env.EMAIL_PASS, // From your .env
+    //   },
+    // });
+
+    // // Define the email options
+    // const mailOptions = {
+    //   from: process.env.EMAIL_USER,
+    //   to: user.email,
+    //   subject: "Verify your TUP account",
+    //   html: `
+    //     <p>Please click the button below to verify your account:</p>
+    //     <a href="${verificationLink}">
+    //       <button style="padding: 10px 20px; font-size: 16px;">VERIFY ACCOUNT</button>
+    //     </a>
+    //   `,
+    // };
+
+    // // Send the verification email
+    // await transporter.sendMail(mailOptions);
+
     // Fetch organizations
     const organizations = await Organization.find().select("name");
 
@@ -98,6 +112,49 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
   } catch (error) {
     console.error("Error processing the user:", error);
     res.status(500).send("Error processing the user: " + error.message);
+  }
+});
+
+// router.get("/verify/:token", async (req, res) => {
+//   try {
+//     // Verify the token using the same secret
+//     const decoded = jwt.verify(req.params.token, process.env.JWT_SECRET);
+//     const user = await User.findById(decoded.userId);
+//     if (!user) return res.status(400).send("Invalid verification link.");
+
+//     // Update the user's verified status
+//     user.isVerified = true;
+//     await user.save();
+
+//     res.send("Email verified successfully. Please log in.");
+//   } catch (error) {
+//     res.status(400).send("Invalid or expired token.");
+//   }
+// });
+
+
+// Get Admin Users
+router.get("/officer/:id", async (req, res) => {
+  try {
+    const userId = req.params.id; // Get userId from URL parameter
+    const officer = await User.findById(userId)
+      .select("-passwordHash")
+      .populate("organization", "name");
+
+    if (!officer) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    if (!officer.isOfficer) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    res.status(200).json(officer);
+  } catch (error) {
+    console.error("Error fetching admin user:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
