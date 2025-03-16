@@ -71,6 +71,7 @@ function authJwt() {
                 `${api}/users/organizations/officers`,
                 `${api}/users/organization/:id/count`,
                 `${api}/users/organization/:id/officers/count`,
+                `${api}/organizations/eligible-officers/organizationId`,
                 //`${api}/users/organizations/officers/:userId/approve`,
                 //`${api}/users/organizations/officers/:userId/approve`
             ]
