@@ -180,16 +180,16 @@ router.post('/bulk-create-questions', async (req, res) => {
 // Update Question
 router.put('/:id', async (req, res) => {
   try {
-    const { question, scale, traitId } = req.body;
+    const { question, translated, traitId, typeId } = req.body;
     const updatedQuestion = await Question.findByIdAndUpdate(
       req.params.id,
-      { question, scale, traitId },
+      { question, translated, traitId, typeId },
       { new: true }
     );
     if (!updatedQuestion) return res.status(404).send('Question not found.');
     res.send(updatedQuestion);
   } catch (error) {
-    res.status(500).send('Error updating question');
+    res.status(500).send('Error updating question: ' + error.message);
   }
 });
 
