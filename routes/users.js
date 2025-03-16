@@ -18,11 +18,10 @@ const streamifier = require("streamifier");
 
 // Register User
 router.post("/register", uploadOptions.single("image"), async (req, res) => {
-   // Check if the email is a TUP email
-  //  if (!req.body.email.endsWith('@tup.edu.ph')) {
-  //   return res.status(400).send("Email must be a TUP email (ending with @tup.edu.ph)");
-  // }
-  // console.log("Register Request Body:", req.body);
+  // Check if the email is a TUP email
+  if (!req.body.email.endsWith('@tup.edu.ph')) {
+    return res.status(400).send("Email must be a TUP email (ending with @tup.edu.ph)");
+  }
 
   const file = req.file;
   if (!file) return res.status(400).send("No image in the request");
@@ -45,6 +44,10 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
 
     const imageUrl = await uploadSingleFile(file);
 
+    // Generate a 6-digit OTP and set expiry (10 minutes)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
     let user = new User({
       name: req.body.name,
       surname: req.body.surname,
@@ -60,52 +63,41 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
       declined: req.body.declined,
       course: req.body.course,
       section: req.body.section,
+      // New OTP fields
+      otp: otp,
+      otpExpires: otpExpires,
+      isVerified: false,
     });
 
     user = await user.save();
 
     if (!user) return res.status(400).send("The user cannot be created!");
 
-    //  // Generate a verification token using JWT
-    // const verificationToken = jwt.sign(
-    //   { userId: user._id },
-    //   process.env.JWT_SECRET,
-    //   { expiresIn: '1d' }
-    // );
+    // Set up Nodemailer transporter (ensure your .env variables are set)
+    let transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER, // Your email from .env
+        pass: process.env.EMAIL_PASS, // Your password from .env
+      },
+    });
 
-    // // Construct the verification link
-    // const verificationLink = `${process.env.BASE_URL}users/verify/${verificationToken}`;
+    // Define the email options with the OTP
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Your OTP Code for TUP Account Verification",
+      html: `<p>Your OTP code is <b>${otp}</b>. It expires in 10 minutes.</p>`,
+    };
 
-    // // Set up Nodemailer transporter using Gmail's SMTP
-    // let transporter = nodemailer.createTransport({
-    //   service: "gmail",
-    //   auth: {
-    //     user: process.env.EMAIL_USER, // From your .env
-    //     pass: process.env.EMAIL_PASS, // From your .env
-    //   },
-    // });
+    // Send the OTP email
+    await transporter.sendMail(mailOptions);
 
-    // // Define the email options
-    // const mailOptions = {
-    //   from: process.env.EMAIL_USER,
-    //   to: user.email,
-    //   subject: "Verify your TUP account",
-    //   html: `
-    //     <p>Please click the button below to verify your account:</p>
-    //     <a href="${verificationLink}">
-    //       <button style="padding: 10px 20px; font-size: 16px;">VERIFY ACCOUNT</button>
-    //     </a>
-    //   `,
-    // };
-
-    // // Send the verification email
-    // await transporter.sendMail(mailOptions);
-
-    // Fetch organizations
+    // Fetch organizations to send back with the response
     const organizations = await Organization.find().select("name");
 
-    // Send response with user data and organizations
     res.status(200).json({
+      message: "Registration successful. Please verify your email using the OTP sent.",
       user: user,
       organizations: organizations,
     });
@@ -115,23 +107,57 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
   }
 });
 
-// router.get("/verify/:token", async (req, res) => {
-//   try {
-//     // Verify the token using the same secret
-//     const decoded = jwt.verify(req.params.token, process.env.JWT_SECRET);
-//     const user = await User.findById(decoded.userId);
-//     if (!user) return res.status(400).send("Invalid verification link.");
 
-//     // Update the user's verified status
-//     user.isVerified = true;
-//     await user.save();
+router.post("/verify-otp", async (req, res) => {
+  try {
+    let { email, otp } = req.body;
 
-//     res.send("Email verified successfully. Please log in.");
-//   } catch (error) {
-//     res.status(400).send("Invalid or expired token.");
-//   }
-// });
+    // Normalize and trim the inputs
+    email = email.trim().toLowerCase();
+    otp = otp.trim();
 
+    // Debug logs
+    console.log("Verify OTP Request:");
+    console.log("Incoming Email:", email);
+    console.log("Incoming OTP:", otp);
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log("User not found for email:", email);
+      return res.status(404).send("User not found.");
+    }
+
+    console.log("Stored OTP in DB:", user.otp);
+    console.log("User isVerified (type & value):", typeof user.isVerified, user.isVerified);
+
+    if (user.isVerified) {
+      console.log("User already verified for email:", email);
+      return res.status(400).send("User is already verified.");
+    }
+
+    if (user.otp !== otp) {
+      console.log("OTP mismatch: Expected", user.otp, "but got", otp);
+      return res.status(400).send("Invalid OTP.");
+    }
+
+    if (user.otpExpires < Date.now()) {
+      console.log("OTP has expired. Expiry:", user.otpExpires, "Current:", Date.now());
+      return res.status(400).send("OTP has expired.");
+    }
+
+    // Update user verification status
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save();
+
+    console.log("User verified successfully:", email);
+    res.send("Email verified successfully.");
+  } catch (error) {
+    console.error("Error during OTP verification:", error);
+    res.status(500).send("Server error during OTP verification.");
+  }
+});
 
 // Get Admin Users
 router.get("/officer/:id", async (req, res) => {
