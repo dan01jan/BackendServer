@@ -69,6 +69,7 @@ function authJwt() {
                 `${api}/users/update/:id`, 
                 `${api}/users/:id`,
                 `${api}/users/verify-otp`,
+                `${api}/users/resend-otp`,
                 `${api}/users/organizations/officers`,
                 `${api}/users/organization/:id/count`,
                 `${api}/users/organization/:id/officers/count`,

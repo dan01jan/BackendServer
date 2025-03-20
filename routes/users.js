@@ -159,6 +159,52 @@ router.post("/verify-otp", async (req, res) => {
   }
 });
 
+router.post("/resend-otp", async (req, res) => {
+  const { email } = req.body;
+
+  try {
+      const user = await User.findOne({ email });
+
+      if (!user) {
+          return res.status(404).send("User not found.");
+      }
+
+      // Generate a new OTP and set expiry (10 minutes)
+      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+      // Update the user's OTP
+      user.otp = newOtp;
+      user.otpExpires = otpExpires;
+      await user.save();
+
+      // Set up Nodemailer transporter
+      let transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+              user: process.env.EMAIL_USER, // Your email
+              pass: process.env.EMAIL_PASS, // Your password
+          },
+      });
+
+      // Define the email with the new OTP
+      const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: user.email,
+          subject: "Your New OTP Code for TUP Account Verification",
+          html: `<p>Your new OTP code is <b>${newOtp}</b>. It expires in 10 minutes.</p>`,
+      };
+
+      // Send the OTP email
+      await transporter.sendMail(mailOptions);
+
+      res.status(200).json({ message: "OTP has been resent successfully." });
+  } catch (error) {
+      console.error("Error resending OTP:", error);
+      res.status(500).send("Error resending OTP: " + error.message);
+  }
+});
+
 // Get Admin Users
 router.get("/officer/:id", async (req, res) => {
   try {
