@@ -235,35 +235,31 @@ router.get('/', async (req, res) => {
 });
 
 // Modified Eligible Officers Route
-// Now finds users whose organizations array contains an entry with a matching organization ID.
+// Get eligible officers for an organization (from the Organization document)
 router.get("/eligible-officers/:organizationId", async (req, res) => {
   try {
     const { organizationId } = req.params;
-    console.log("Received Organization ID:", organizationId); // Debugging
 
-    // Ensure organizationId is valid
+    // Validate organizationId
     if (!mongoose.Types.ObjectId.isValid(organizationId)) {
       return res.status(400).json({ message: "Invalid organization ID" });
     }
 
-    // Fetch users with a matching organization membership in their organizations array.
-    const users = await User.find({
-      organizations: {
-        $elemMatch: {
-          organization: new mongoose.Types.ObjectId(organizationId)
-        }
-      },
-      isOfficer: true,
-      declined: false,
-    });
+    // Fetch the organization by ID and select only the officers field
+    const organization = await Organization.findById(organizationId).select('officers');
 
-    console.log("Found Officers:", users); // Debugging
-    res.status(200).json(users);
+    if (!organization) {
+      return res.status(404).json({ message: "Organization not found" });
+    }
+
+    // Return the officers array from the organization document
+    res.status(200).json(organization.officers);
   } catch (error) {
-    console.error("Error fetching officers:", error.message); // Log error
+    console.error("Error fetching officers:", error.message);
     res.status(500).json({ message: "Error fetching officers", error: error.message });
   }
 });
+
 
 // Get Organization by ID
 router.get('/:id', async (req, res) => {
