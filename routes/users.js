@@ -363,10 +363,8 @@ router.get("/image/:id", async (req, res) => {
 
 // Web Login (for web-based authentication)
 router.post("/weblogin", async (req, res) => {
-  console.log(req.body.email);
-
   try {
-    // Populate the nested organizations.organization field
+    // Populate organizations details (e.g. name)
     const user = await User.findOne({ email: req.body.email }).populate(
       "organizations.organization",
       "name"
@@ -387,32 +385,20 @@ router.post("/weblogin", async (req, res) => {
         { expiresIn: "1d" }
       );
 
-      console.log(`Login successful for user: ${user.email}, Token: ${token}`);
-
-      // Use the first organization membership as primary (if any)
-      const primaryMembership =
-        user.organizations && user.organizations.length > 0
-          ? user.organizations[0]
-          : {};
+      // Create a user data object that includes all organizations
+      const userData = {
+        userId: user.id,
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        organizations: user.organizations, // send the full array for role checking
+        isAdmin: user.isAdmin,
+        isOfficer: user.isOfficer,
+        // add other fields as needed
+      };
 
       return res.status(200).send({
-        user: {
-          userId: user.id,
-          name: user.name,
-          surname: user.surname,
-          email: user.email,
-          organizationId: primaryMembership.organization
-            ? primaryMembership.organization._id
-            : null,
-          organizationName: primaryMembership.organization
-            ? primaryMembership.organization.name
-            : null,
-          department: primaryMembership.department || null,
-          course: user.course,
-          image: user.image,
-          isAdmin: user.isAdmin,
-          isOfficer: user.isOfficer,
-        },
+        user: userData,
         token: token,
       });
     } else {
@@ -423,6 +409,7 @@ router.post("/weblogin", async (req, res) => {
     return res.status(500).send("Internal server error");
   }
 });
+
 
 // Aggregation on the "users" collection to group pending officer requests by organization.
 router.get("/organizations/officers", async (req, res) => {
