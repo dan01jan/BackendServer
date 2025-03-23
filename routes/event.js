@@ -37,7 +37,6 @@ const http = require("https");
 // const uploadOptions = multer({ storage: storage });
 
 // Get All Events
-
 router.get(`/`, async (req, res) => {
   const { type } = req.query;
 

@@ -18,16 +18,17 @@ const streamifier = require("streamifier");
 
 // Register User
 router.post("/register", uploadOptions.single("image"), async (req, res) => {
-  // Check if the email is a TUP email
-  if (!req.body.email.endsWith('@tup.edu.ph')) {
-    return res.status(400).send("Email must be a TUP email (ending with @tup.edu.ph)");
+  if (!req.body.email.endsWith("@tup.edu.ph")) {
+    return res
+      .status(400)
+      .send("Email must be a TUP email (ending with @tup.edu.ph)");
   }
 
   const file = req.file;
   if (!file) return res.status(400).send("No image in the request");
 
   try {
-    // Function to upload a single file to Cloudinary
+    // Upload image to Cloudinary
     const uploadSingleFile = (file) => {
       return new Promise((resolve, reject) => {
         cloudinary.uploader
@@ -44,60 +45,60 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
 
     const imageUrl = await uploadSingleFile(file);
 
-    // Generate a 6-digit OTP and set expiry (10 minutes)
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    // Parse the organization selections from the form data
+    let orgSelections = [];
+    if (req.body.orgSelections) {
+      try {
+        orgSelections = JSON.parse(req.body.orgSelections);
+      } catch (e) {
+        return res.status(400).send("Invalid organization selections data.");
+      }
+    }
 
+    // Validate: allow at most one Officer role
+    const officerCount = orgSelections.filter(
+      (sel) => sel.role === "Officer"
+    ).length;
+    if (officerCount > 1) {
+      return res
+        .status(400)
+        .send("You can only be an officer for one organization.");
+    }
+
+    // Process orgSelections: For officer roles, explicitly set isOfficer to false (pending approval)
+    const processedOrgSelections = orgSelections.map((org) => {
+      if (org.role === "Officer") {
+        return { ...org, isOfficer: false };
+      }
+      return org;
+    });
+
+    // Create the user (note: no top-level isOfficer property)
     let user = new User({
       name: req.body.name,
       surname: req.body.surname,
       email: req.body.email,
       passwordHash: bcrypt.hashSync(req.body.password, 10),
-      role: req.body.role,
-      organization: req.body.organization,
-      department: req.body.department,
-      image: imageUrl,
-      isAdmin: req.body.isAdmin,
-      isOfficer: req.body.isOfficer,
-      isHead: req.body.isHead,
-      declined: req.body.declined,
+      organizations: processedOrgSelections,
       course: req.body.course,
       section: req.body.section,
-      // New OTP fields
-      otp: otp,
-      otpExpires: otpExpires,
-      isVerified: false,
+      image: imageUrl,
+      isAdmin: req.body.isAdmin,
+      isHead: req.body.isHead,
+      declined: req.body.declined,
+      isVerified: true,
     });
 
     user = await user.save();
 
-    if (!user) return res.status(400).send("The user cannot be created!");
+    if (!user)
+      return res.status(400).send("The user cannot be created!");
 
-    // Set up Nodemailer transporter (ensure your .env variables are set)
-    let transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER, // Your email from .env
-        pass: process.env.EMAIL_PASS, // Your password from .env
-      },
-    });
-
-    // Define the email options with the OTP
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Your OTP Code for TUP Account Verification",
-      html: `<p>Your OTP code is <b>${otp}</b>. It expires in 10 minutes.</p>`,
-    };
-
-    // Send the OTP email
-    await transporter.sendMail(mailOptions);
-
-    // Fetch organizations to send back with the response
+    // Optionally, send back all organizations (for selection, etc.)
     const organizations = await Organization.find().select("name");
 
     res.status(200).json({
-      message: "Registration successful. Please verify your email using the OTP sent.",
+      message: "Registration successful.",
       user: user,
       organizations: organizations,
     });
@@ -107,111 +108,14 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
   }
 });
 
-
-router.post("/verify-otp", async (req, res) => {
-  try {
-    let { email, otp } = req.body;
-
-    // Normalize and trim the inputs
-    email = email.trim().toLowerCase();
-    otp = otp.trim();
-
-    // Debug logs
-    console.log("Verify OTP Request:");
-    console.log("Incoming Email:", email);
-    console.log("Incoming OTP:", otp);
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      console.log("User not found for email:", email);
-      return res.status(404).send("User not found.");
-    }
-
-    console.log("Stored OTP in DB:", user.otp);
-    console.log("User isVerified (type & value):", typeof user.isVerified, user.isVerified);
-
-    if (user.isVerified) {
-      console.log("User already verified for email:", email);
-      return res.status(400).send("User is already verified.");
-    }
-
-    if (user.otp !== otp) {
-      console.log("OTP mismatch: Expected", user.otp, "but got", otp);
-      return res.status(400).send("Invalid OTP.");
-    }
-
-    if (user.otpExpires < Date.now()) {
-      console.log("OTP has expired. Expiry:", user.otpExpires, "Current:", Date.now());
-      return res.status(400).send("OTP has expired.");
-    }
-
-    // Update user verification status
-    user.isVerified = true;
-    user.otp = null;
-    user.otpExpires = null;
-    await user.save();
-
-    console.log("User verified successfully:", email);
-    res.send("Email verified successfully.");
-  } catch (error) {
-    console.error("Error during OTP verification:", error);
-    res.status(500).send("Server error during OTP verification.");
-  }
-});
-
-router.post("/resend-otp", async (req, res) => {
-  const { email } = req.body;
-
-  try {
-      const user = await User.findOne({ email });
-
-      if (!user) {
-          return res.status(404).send("User not found.");
-      }
-
-      // Generate a new OTP and set expiry (10 minutes)
-      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
-
-      // Update the user's OTP
-      user.otp = newOtp;
-      user.otpExpires = otpExpires;
-      await user.save();
-
-      // Set up Nodemailer transporter
-      let transporter = nodemailer.createTransport({
-          service: "gmail",
-          auth: {
-              user: process.env.EMAIL_USER, // Your email
-              pass: process.env.EMAIL_PASS, // Your password
-          },
-      });
-
-      // Define the email with the new OTP
-      const mailOptions = {
-          from: process.env.EMAIL_USER,
-          to: user.email,
-          subject: "Your New OTP Code for TUP Account Verification",
-          html: `<p>Your new OTP code is <b>${newOtp}</b>. It expires in 10 minutes.</p>`,
-      };
-
-      // Send the OTP email
-      await transporter.sendMail(mailOptions);
-
-      res.status(200).json({ message: "OTP has been resent successfully." });
-  } catch (error) {
-      console.error("Error resending OTP:", error);
-      res.status(500).send("Error resending OTP: " + error.message);
-  }
-});
-
-// Get Admin Users
+// Get Admin Users (Officer)
 router.get("/officer/:id", async (req, res) => {
   try {
     const userId = req.params.id; // Get userId from URL parameter
+    // Populate the nested organizations.organization field
     const officer = await User.findById(userId)
       .select("-passwordHash")
-      .populate("organization", "name");
+      .populate("organizations.organization", "name");
 
     if (!officer) {
       return res
@@ -220,7 +124,9 @@ router.get("/officer/:id", async (req, res) => {
     }
 
     if (!officer.isOfficer) {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return res
+        .status(403)
+        .json({ success: false, message: "Access denied" });
     }
 
     res.status(200).json(officer);
@@ -232,7 +138,6 @@ router.get("/officer/:id", async (req, res) => {
 
 // Get Users
 router.get(`/`, async (req, res) => {
-  // const userList = await User.find();
   const userList = await User.find().select("-passwordHash");
   console.log(userList);
 
@@ -242,7 +147,7 @@ router.get(`/`, async (req, res) => {
   res.send(userList);
 });
 
-//User Profile (Mobile)
+// User Profile (Mobile)
 router.get("/me", authJwt, async (req, res) => {
   try {
     const userId = req.user.userId; // Assuming you store userId in the JWT payload
@@ -257,7 +162,7 @@ router.get("/me", authJwt, async (req, res) => {
   }
 });
 
-// Get Specific User (di ata to ginamit)
+// Get Specific User
 router.get("/:id", async (req, res) => {
   const user = await User.findById(req.params.id).select("-passwordHash");
 
@@ -269,23 +174,7 @@ router.get("/:id", async (req, res) => {
   res.status(200).send(user);
 });
 
-// for behavioral analysis chart picker
-router.get("/:userId", async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const user = await User.findById(userId).select("name surname");
-    if (user) {
-      res.status(200).json(user);
-    } else {
-      res.status(404).json({ message: "User not found" });
-    }
-  } catch (error) {
-    console.error("Error fetching user details:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Get Specific User Email (di ata to ginamit)
+// Get Specific User by Email
 router.get("/email/:email", async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email }).select("name");
@@ -299,7 +188,7 @@ router.get("/email/:email", async (req, res) => {
   }
 });
 
-// Update User (di ata to ginamit)
+// Update User (with image)
 router.put("/update/:id", uploadOptions.single("image"), async (req, res) => {
   try {
     const userExist = await User.findById(req.params.id);
@@ -338,7 +227,7 @@ router.put("/update/:id", uploadOptions.single("image"), async (req, res) => {
   }
 });
 
-// (di ata to ginamit)
+// Update User (without image)
 router.put("/:id", async (req, res) => {
   try {
     const userExist = await User.findById(req.params.id);
@@ -346,27 +235,12 @@ router.put("/:id", async (req, res) => {
       return res.status(404).send("User not found");
     }
 
-    // let newPassword;
-    // if (req.body.password) {
-    //     newPassword = bcrypt.hashSync(req.body.password, 10);
-    // } else {
-    //     newPassword = userExist.passwordHash;
-    // }
-
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
       {
         name: req.body.name,
         email: req.body.email,
-        // passwordHash: newPassword,
-        // phone: req.body.phone,
-        isOfficer: req.body.isOfficer,
-        // isAdmin: req.body.isAdmin,
-        // street: req.body.street,
-        // apartment: req.body.apartment,
-        // zip: req.body.zip,
-        // city: req.body.city,
-        // country: req.body.country,
+        // Removed: isOfficer: req.body.isOfficer,
       },
       { new: true }
     );
@@ -378,7 +252,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Login User
+// Login User (API)
 router.post("/login", async (req, res) => {
   console.log(req.body.email);
   const user = await User.findOne({ email: req.body.email });
@@ -392,7 +266,6 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       {
         userId: user.id,
-        // isAdmin: user.isAdmin
       },
       secret,
       { expiresIn: "1d" }
@@ -400,22 +273,22 @@ router.post("/login", async (req, res) => {
     console.log(`Login successful for user: ${user.email}, Token: ${token}`);
     res.status(200).send({ user: user.email, token: token });
   } else {
-    res.status(400).send("password is wrong!");
+    res.status(400).send("Password is wrong!");
   }
 });
 
-// Delete User (di ata to ginamit)
+// Delete User
 router.delete("/:id", (req, res) => {
   User.findByIdAndRemove(req.params.id)
     .then((user) => {
       if (user) {
         return res
           .status(200)
-          .json({ success: true, message: "the user is deleted!" });
+          .json({ success: true, message: "The user is deleted!" });
       } else {
         return res
           .status(404)
-          .json({ success: false, message: "user not found!" });
+          .json({ success: false, message: "User not found!" });
       }
     })
     .catch((err) => {
@@ -423,9 +296,9 @@ router.delete("/:id", (req, res) => {
     });
 });
 
-// (di ata to ginamit)
+// Get total number of users for all users
 router.get(`/get/count`, async (req, res) => {
-  const userCount = await User.countDocuments((count) => count);
+  const userCount = await User.countDocuments();
 
   if (!userCount) {
     res.status(500).json({ success: false });
@@ -435,7 +308,7 @@ router.get(`/get/count`, async (req, res) => {
   });
 });
 
-// (di to ginamit)
+// Google Login
 router.post("/google_login", async (req, res) => {
   try {
     const { tokenId } = req.body;
@@ -460,14 +333,13 @@ router.post("/google_login", async (req, res) => {
 
     const token = jwt.sign(
       {
-        userId: user._id, // use _id from MongoDB
+        userId: user._id,
         isOfficer: user.isOfficer,
       },
-      process.env.JWT_SECRET, // Using environment variable for JWT secret
-      { expiresIn: process.env.JWT_EXPIRES_TIME } // Using environment variable for token expiration
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_TIME }
     );
 
-    // Return the JWT token along with user information
     res.status(200).json({ msg: "Login successful", user, token });
   } catch (err) {
     console.error(err);
@@ -475,7 +347,7 @@ router.post("/google_login", async (req, res) => {
   }
 });
 
-// (di to ginamit)
+// Get User Image
 router.get("/image/:id", async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select("image");
@@ -489,13 +361,14 @@ router.get("/image/:id", async (req, res) => {
   }
 });
 
+// Web Login (for web-based authentication)
 router.post("/weblogin", async (req, res) => {
   console.log(req.body.email);
 
   try {
-    // Find user and populate organization name
+    // Populate the nested organizations.organization field
     const user = await User.findOne({ email: req.body.email }).populate(
-      "organization",
+      "organizations.organization",
       "name"
     );
 
@@ -505,11 +378,10 @@ router.post("/weblogin", async (req, res) => {
       return res.status(400).send("User not found");
     }
 
-    // Compare the password with the hash
     if (bcrypt.compareSync(req.body.password, user.passwordHash)) {
       const token = jwt.sign(
         {
-          userId: user.id, // User ID in the JWT payload
+          userId: user.id,
         },
         secret,
         { expiresIn: "1d" }
@@ -517,18 +389,27 @@ router.post("/weblogin", async (req, res) => {
 
       console.log(`Login successful for user: ${user.email}, Token: ${token}`);
 
-      // Send back the user data including organization name
+      // Use the first organization membership as primary (if any)
+      const primaryMembership =
+        user.organizations && user.organizations.length > 0
+          ? user.organizations[0]
+          : {};
+
       return res.status(200).send({
         user: {
-          userId: user.id, // User ID
+          userId: user.id,
           name: user.name,
           surname: user.surname,
           email: user.email,
-          organizationId: user.organization._id, // Organization ID
-          organizationName: user.organization.name, // Organization Name
-          department: user.department,
+          organizationId: primaryMembership.organization
+            ? primaryMembership.organization._id
+            : null,
+          organizationName: primaryMembership.organization
+            ? primaryMembership.organization.name
+            : null,
+          department: primaryMembership.department || null,
           course: user.course,
-          image:user.image,
+          image: user.image,
           isAdmin: user.isAdmin,
           isOfficer: user.isOfficer,
         },
@@ -543,107 +424,126 @@ router.post("/weblogin", async (req, res) => {
   }
 });
 
-// Get Officer Role
-router.get('/organizations/officers', async (req, res) => {
+// Aggregation on the "users" collection to group pending officer requests by organization.
+router.get("/organizations/officers", async (req, res) => {
   try {
-    const organizationsWithOfficers = await Organization.aggregate([
+    const organizations = await Organization.aggregate([
       {
         $lookup: {
-          from: "users", // ensure this matches your collection name
-          localField: "_id",
-          foreignField: "organization",
-          as: "users"
-        }
-      },
-      {
-        $addFields: {
-          officers: {
-            $filter: {
-              input: "$users",
-              as: "user",
-              cond: {
-                $and: [
-                  { $eq: [{ $toLower: "$$user.role" }, "officer"] },
-                  { $eq: ["$$user.isOfficer", false] },
-                  { $eq: ["$$user.declined", false] }
-                ]
+          from: "users",
+          let: { orgId: "$_id" },
+          pipeline: [
+            // Only consider users that haven't been declined.
+            { $match: { declined: false } },
+            // Unwind each user's organizations array.
+            { $unwind: "$organizations" },
+            // Only match memberships for the current organization that are pending officer requests.
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$organizations.organization", "$$orgId"] },
+                    { $eq: ["$organizations.role", "Officer"] },
+                    { $eq: ["$organizations.isOfficer", false] }
+                  ]
+                }
+              }
+            },
+            // Project only the fields needed for the officer.
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                surname: 1,
+                email: 1,
+                image: 1,
+                department: "$organizations.department"
               }
             }
-          }
+          ],
+          as: "officers"
         }
       },
+      // Optionally, project only the fields you need from the organization.
       {
         $project: {
-          name: 1,       // organization name
+          _id: 1,
+          name: 1,
           officers: 1
         }
       }
     ]);
 
-    res.json(organizationsWithOfficers);
+    res.json(organizations);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-router.put('/organizations/officers/:userId/decline', async (req, res) => {
+// Decline an Officer
+router.put("/organizations/officers/:userId/decline", async (req, res) => {
   try {
     const { userId } = req.params;
-    // Set declined to true so that the user is removed from pending list.
-    const updatedOfficer = await User.findByIdAndUpdate(
-      userId,
-      { declined: true },
-      { new: true }
-    );
-
-    if (!updatedOfficer) {
-      return res.status(404).json({ error: 'Officer not found.' });
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "Officer not found." });
     }
-
+    const membership = user.organizations.find(m =>
+      m.role.toLowerCase() === 'officer'
+    );
+    if (!membership) {
+      return res.status(404).json({ error: "Officer membership not found." });
+    }
+    membership.isOfficer = false; // Decline the officer status
+    user.declined = true; // Optional: mark the user as declined if needed
+    await user.save();
     res.json({
-      message: 'Officer declined successfully.',
-      officer: updatedOfficer
+      message: "Officer declined successfully.",
+      officer: user,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-
-router.put('/organizations/officers/:userId/approve', async (req, res) => {
+// Approve an Officer
+router.put("/organizations/officers/:userId/approve", async (req, res) => {
   try {
     const { userId } = req.params;
-
-    // Find the user by ID and update isOfficer to true.
-    const updatedOfficer = await User.findByIdAndUpdate(
-      userId,
-      { isOfficer: true },
-      { new: true }
-    );
-
-    if (!updatedOfficer) {
-      return res.status(404).json({ error: 'Officer not found.' });
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "Officer not found." });
     }
-
+    // Find the officer membership (assuming one officer membership per user)
+    const membership = user.organizations.find(m =>
+      m.role.toLowerCase() === 'officer'
+    );
+    if (!membership) {
+      return res.status(404).json({ error: "Officer membership not found." });
+    }
+    membership.isOfficer = true; // Approve the officer status
+    await user.save();
     res.json({
-      message: 'Officer approved successfully.',
-      officer: updatedOfficer
+      message: "Officer approved successfully.",
+      officer: user,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// Route to get the total number of users for a specific organization
+// Count total users for a specific organization (using organizations array)
 router.get("/organization/:id/count", async (req, res) => {
   try {
     const orgId = req.params.id;
 
-    // Count users whose organization field matches the provided orgId
-    const userCount = await User.countDocuments({ organization: orgId });
+    // Count users whose organizations array contains an entry with organization equals orgId
+    const userCount = await User.countDocuments({
+      "organizations.organization": orgId
+    });
 
     res.status(200).json({ organizationId: orgId, userCount });
   } catch (error) {
@@ -652,17 +552,20 @@ router.get("/organization/:id/count", async (req, res) => {
   }
 });
 
-// Route to count officer users (role "officer" and isOfficer = true) for a specific organization
+// Count officer users for a specific organization
 router.get("/organization/:id/officers/count", async (req, res) => {
   try {
     const orgId = req.params.id;
 
-    // Count users whose organization field matches orgId,
-    // role is "officer" (case-insensitive) and isOfficer is true
+    // Count users that have at least one membership with role "Officer" and isOfficer true for the given organization
     const officerCount = await User.countDocuments({
-      organization: orgId,
-      role: { $regex: /^officer$/i },
-      isOfficer: true
+      organizations: {
+        $elemMatch: {
+          organization: orgId,
+          role: { $regex: /^officer$/i },
+          isOfficer: true,
+        },
+      },
     });
 
     res.status(200).json({ organizationId: orgId, officerCount });
