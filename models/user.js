@@ -77,6 +77,8 @@ const userSchema = new mongoose.Schema({
     default: null,
   },
   isVerified: { type: Boolean, default: true },
+  otp: { type: String },
+  otpExpires: { type: Date },
 });
 
 userSchema.virtual('id').get(function () {
