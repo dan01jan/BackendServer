@@ -364,10 +364,10 @@ router.get("/image/:id", async (req, res) => {
 // Web Login (for web-based authentication)
 router.post("/weblogin", async (req, res) => {
   try {
-    // Populate organizations details (e.g. name)
+    // Populate organizations details (e.g. name and image)
     const user = await User.findOne({ email: req.body.email }).populate(
       "organizations.organization",
-      "name"
+      "name image"
     );
 
     const secret = process.env.secret;
@@ -385,16 +385,16 @@ router.post("/weblogin", async (req, res) => {
         { expiresIn: "1d" }
       );
 
-      // Create a user data object that includes all organizations
+      // Include the image field in the user data
       const userData = {
         userId: user.id,
         name: user.name,
         surname: user.surname,
         email: user.email,
-        organizations: user.organizations, // send the full array for role checking
+        organizations: user.organizations, // Each organization's image will now be available
         isAdmin: user.isAdmin,
         isOfficer: user.isOfficer,
-        // add other fields as needed
+        image: user.image, // User image
       };
 
       return res.status(200).send({
@@ -409,7 +409,6 @@ router.post("/weblogin", async (req, res) => {
     return res.status(500).send("Internal server error");
   }
 });
-
 
 // Aggregation on the "users" collection to group pending officer requests by organization.
 router.get("/organizations/officers", async (req, res) => {
@@ -522,14 +521,20 @@ router.put("/organizations/officers/:userId/approve", async (req, res) => {
   }
 });
 
-// Count total users for a specific organization (using organizations array)
+// Count total users with role "User" for a specific organization
 router.get("/organization/:id/count", async (req, res) => {
   try {
     const orgId = req.params.id;
 
-    // Count users whose organizations array contains an entry with organization equals orgId
+    // Count only those users whose 'organizations' array has an entry with:
+    // { organization: orgId, role: "User" }
     const userCount = await User.countDocuments({
-      "organizations.organization": orgId
+      organizations: {
+        $elemMatch: {
+          organization: orgId,
+          role: { $regex: /^user$/i }, // case-insensitive match
+        },
+      },
     });
 
     res.status(200).json({ organizationId: orgId, userCount });
@@ -538,6 +543,7 @@ router.get("/organization/:id/count", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // Count officer users for a specific organization
 router.get("/organization/:id/officers/count", async (req, res) => {
