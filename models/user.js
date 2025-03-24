@@ -44,6 +44,10 @@ const userSchema = new mongoose.Schema({
     type: [organizationMembershipSchema],
     default: []
   },
+  course: {
+    type: String,
+    default: ''
+  },
   section: {
     type: String,
     default: ''
@@ -73,6 +77,8 @@ const userSchema = new mongoose.Schema({
     default: null,
   },
   isVerified: { type: Boolean, default: true },
+  otp: { type: String },
+  otpExpires: { type: Date },
 });
 
 userSchema.virtual('id').get(function () {
