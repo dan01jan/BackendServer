@@ -44,6 +44,10 @@ const userSchema = new mongoose.Schema({
     type: [organizationMembershipSchema],
     default: []
   },
+  course: {
+    type: String,
+    default: ''
+  },
   section: {
     type: String,
     default: ''
