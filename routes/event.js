@@ -799,4 +799,27 @@ const applyCooldown = async (userId, cooldownTime) => {
   await user.save();
 };
 
+// Get All Upcoming Events
+router.get("/events/upcoming", async (req, res) => {
+  try {
+    const currentDate = new Date();
+    console.log("Current Date:", currentDate);
+    
+    const events = await Event.find({ dateStart: { $gte: currentDate } })
+      .populate("type", "eventType")
+      .lean();
+    
+    console.log("Upcoming events found:", events);
+    
+    if (!events || events.length === 0) {
+      return res.status(200).json({ message: "No upcoming events found." });
+    }
+    res.json(events);
+  } catch (error) {
+    console.error("Error fetching upcoming events:", error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
+  }
+});
+
+
 module.exports=router;
