@@ -45,6 +45,10 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
 
     const imageUrl = await uploadSingleFile(file);
 
+    // Generate a 6-digit OTP and set expiry (10 minutes)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+  
     // Parse the organization selections from the form data
     let orgSelections = [];
     if (req.body.orgSelections) {
@@ -86,7 +90,10 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
       isAdmin: req.body.isAdmin,
       isHead: req.body.isHead,
       declined: req.body.declined,
-      isVerified: true,
+      // New OTP fields
+      // otp: otp,
+      // otpExpires: otpExpires,
+      isVerified: false,
     });
 
     user = await user.save();
@@ -97,7 +104,28 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
     // Optionally, send back all organizations (for selection, etc.)
     const organizations = await Organization.find().select("name");
 
+    // Set up Nodemailer transporter (ensure your .env variables are set)
+    let transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER, // Your email from .env
+        pass: process.env.EMAIL_PASS, // Your password from .env
+      },
+    });
+
+    // Define the email options with the OTP
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Your OTP Code for TUP Account Verification",
+      html: `<p>Your OTP code is <b>${otp}</b>. It expires in 10 minutes.</p>`,
+    };
+
+    // Send the OTP email
+    // await transporter.sendMail(mailOptions);
+
     res.status(200).json({
+      // message: "Registration successful. Please verify your email using the OTP sent.",
       message: "Registration successful.",
       user: user,
       organizations: organizations,
@@ -105,6 +133,103 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
   } catch (error) {
     console.error("Error processing the user:", error);
     res.status(500).send("Error processing the user: " + error.message);
+  }
+});
+
+router.post("/resend-otp", async (req, res) => {
+  const { email } = req.body;
+
+  try {
+      const user = await User.findOne({ email });
+
+      if (!user) {
+          return res.status(404).send("User not found.");
+      }
+
+      // Generate a new OTP and set expiry (10 minutes)
+      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+      // Update the user's OTP
+      user.otp = newOtp;
+      user.otpExpires = otpExpires;
+      await user.save();
+
+      // Set up Nodemailer transporter
+      let transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+              user: process.env.EMAIL_USER, // Your email
+              pass: process.env.EMAIL_PASS, // Your password
+          },
+      });
+
+      // Define the email with the new OTP
+      const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: user.email,
+          subject: "Your New OTP Code for TUP Account Verification",
+          html: `<p>Your new OTP code is <b>${newOtp}</b>. It expires in 10 minutes.</p>`,
+      };
+
+      // Send the OTP email
+      await transporter.sendMail(mailOptions);
+
+      res.status(200).json({ message: "OTP has been resent successfully." });
+  } catch (error) {
+      console.error("Error resending OTP:", error);
+      res.status(500).send("Error resending OTP: " + error.message);
+  }
+});
+
+router.post("/verify-otp", async (req, res) => {
+  try {
+    let { email, otp } = req.body;
+
+    // Normalize and trim the inputs
+    email = email.trim().toLowerCase();
+    otp = otp.trim();
+
+    // Debug logs
+    console.log("Verify OTP Request:");
+    console.log("Incoming Email:", email);
+    console.log("Incoming OTP:", otp);
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log("User not found for email:", email);
+      return res.status(404).send("User not found.");
+    }
+
+    console.log("Stored OTP in DB:", user.otp);
+    console.log("User isVerified (type & value):", typeof user.isVerified, user.isVerified);
+
+    if (user.isVerified) {
+      console.log("User already verified for email:", email);
+      return res.status(400).send("User is already verified.");
+    }
+
+    if (user.otp !== otp) {
+      console.log("OTP mismatch: Expected", user.otp, "but got", otp);
+      return res.status(400).send("Invalid OTP.");
+    }
+
+    if (user.otpExpires < Date.now()) {
+      console.log("OTP has expired. Expiry:", user.otpExpires, "Current:", Date.now());
+      return res.status(400).send("OTP has expired.");
+    }
+
+    // Update user verification status
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save();
+
+    console.log("User verified successfully:", email);
+    res.send("Email verified successfully.");
+  } catch (error) {
+    console.error("Error during OTP verification:", error);
+    res.status(500).send("Server error during OTP verification.");
   }
 });
 
@@ -174,6 +299,22 @@ router.get("/:id", async (req, res) => {
   res.status(200).send(user);
 });
 
+// for behavioral analysis chart picker
+router.get("/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId).select("name surname");
+    if (user) {
+      res.status(200).json(user);
+    } else {
+      res.status(404).json({ message: "User not found" });
+    }
+  } catch (error) {
+    console.error("Error fetching user details:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Get Specific User by Email
 router.get("/email/:email", async (req, res) => {
   try {
@@ -235,12 +376,27 @@ router.put("/:id", async (req, res) => {
       return res.status(404).send("User not found");
     }
 
+    // let newPassword;
+    // if (req.body.password) {
+    //     newPassword = bcrypt.hashSync(req.body.password, 10);
+    // } else {
+    //     newPassword = userExist.passwordHash;
+    // }
+
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
       {
         name: req.body.name,
         email: req.body.email,
-        // Removed: isOfficer: req.body.isOfficer,
+         // passwordHash: newPassword,
+        // phone: req.body.phone,
+        isOfficer: req.body.isOfficer,
+        // isAdmin: req.body.isAdmin,
+        // street: req.body.street,
+        // apartment: req.body.apartment,
+        // zip: req.body.zip,
+        // city: req.body.city,
+        // country: req.body.country,
       },
       { new: true }
     );
@@ -262,10 +418,16 @@ router.post("/login", async (req, res) => {
     return res.status(400).send("The user not found");
   }
 
+  // console.log("verified?", user.isVerified)
+  // if (!user.isVerified) {
+  //   return res.status(400).send("Your email is not verified. Please verify before logging in.");
+  // }
+
   if (user && bcrypt.compareSync(req.body.password, user.passwordHash)) {
     const token = jwt.sign(
       {
         userId: user.id,
+        // isAdmin: user.isAdmin
       },
       secret,
       { expiresIn: "1d" }
@@ -384,6 +546,8 @@ router.post("/weblogin", async (req, res) => {
         secret,
         { expiresIn: "1d" }
       );
+
+      console.log(`Login successful for user: ${user.email}, Token: ${token}`);
 
       // Include the image field in the user data
       const userData = {
@@ -545,6 +709,7 @@ router.get("/organization/:id/count", async (req, res) => {
 });
 
 
+// Count officer users for a specific organization
 // Count officer users for a specific organization
 router.get("/organization/:id/officers/count", async (req, res) => {
   try {
