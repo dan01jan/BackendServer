@@ -283,11 +283,11 @@ router.get('/:id', async (req, res) => {
     }
 
     // Log specific details of the organization
-    console.log("Organization Details:");
-    console.log("Name:", organization.name);
-    console.log("Description:", organization.description);
-    console.log("Image:", organization.image);
-    console.log("Other Details:", organization);
+    // console.log("Organization Details:");
+    // console.log("Name:", organization.name);
+    // console.log("Description:", organization.description);
+    // console.log("Image:", organization.image);
+    // console.log("Other Details:", organization);
 
     res.status(200).json(organization);
   } catch (error) {

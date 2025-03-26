@@ -117,20 +117,21 @@ router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
         const users = await User.find({ '_id': { $in: userIds } });
 
         const usersWithAttendance = users.map(user => {
-            const attendance = attendanceRecords.find(record => record.userId.toString() === user._id.toString());
+            // Find the first department that is not "None"
+            const validDepartment = user.organizations?.find(org => org.department !== "None")?.department || "N/A";
+        
             return {
                 userId: user._id,
                 firstName: user.name,
                 lastName: user.surname,
-                department: user.department,
+                department: validDepartment, // Get the first valid department
                 section: user.section,
-                hasAttended: attendance ? attendance.hasAttended : false,
-                hasRegistered: attendance ? attendance.hasRegistered : false,
-                dateRegistered: attendance ? attendance.dateRegistered : null,
-
+                hasAttended: attendanceRecords.some(record => record.userId.toString() === user._id.toString() && record.hasAttended),
+                hasRegistered: attendanceRecords.some(record => record.userId.toString() === user._id.toString() && record.hasRegistered),
+                dateRegistered: attendanceRecords.find(record => record.userId.toString() === user._id.toString())?.dateRegistered || null,
             };
         });
-
+        
         res.json(usersWithAttendance);
         console.log("ano ka", usersWithAttendance)
     } catch (error) {
