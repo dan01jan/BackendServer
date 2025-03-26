@@ -12,25 +12,25 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 app.use(cors());
 app.options("*", cors());
 
-//middleware
+// middleware
 app.use(express.json());
 app.use(morgan('tiny'));
 app.use(authJwt());
 app.use(errorHandler);
 app.use("/public/uploads", express.static(__dirname + "/public/uploads"));
 
-//Routes
+// Routes
 const usersRoutes = require("./routes/users");
-const eventRoutes = require("./routes/event")
+const eventRoutes = require("./routes/event");
 const questionnaireRoutes = require('./routes/questionnaire');
-const ratingsRoutes = require("./routes/rating")
-const attendanceRoutes = require("./routes/attendance")
-const traitRoutes = require("./routes/trait")
-const questionRoutes = require("./routes/question")
-const responseRoutes = require("./routes/response")
-const postRoutes = require("./routes/post")
-const typeRoutes = require("./routes/type")
-const organizationRoutes = require("./routes/organization")
+const ratingsRoutes = require("./routes/rating");
+const attendanceRoutes = require("./routes/attendance");
+const traitRoutes = require("./routes/trait");
+const questionRoutes = require("./routes/question");
+const responseRoutes = require("./routes/response");
+const postRoutes = require("./routes/post");
+const typeRoutes = require("./routes/type");
+const organizationRoutes = require("./routes/organization");
 
 const api = process.env.API_URL;
 
@@ -45,21 +45,23 @@ app.use(`${api}/responses`, responseRoutes);
 app.use(`${api}/posts`, postRoutes);
 app.use(`${api}/types`, typeRoutes);
 app.use(`${api}/organizations`, organizationRoutes);
+
+// Catch-all for unmatched routes with detailed logging
 app.use('*', (req, res) => {
-  console.log("Route not found");
+  console.error(`Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ message: "Route not found" });
 });
 
+// Home route should be defined before the catch-all if you want it to be reachable.
 app.get("/", (req, res) => {
   res.send("Server is running");
 });
 
-//Database
+// Database
 mongoose
   .connect(process.env.CONNECTION_STRING, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-    // dbName: "eshop",
   })
   .then(() => {
     console.log("Database Connection is ready...");
@@ -68,7 +70,7 @@ mongoose
     console.log(err);
   });
 
-//Server
+// Server
 app.listen(4000, () => {
   console.log("server is running http://localhost:4000");
 });
