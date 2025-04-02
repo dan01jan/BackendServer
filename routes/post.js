@@ -52,15 +52,15 @@ router.get('/:postId/comments', async (req, res) => {
     console.log("Translated Post Text:", translatedPostText);
 
     const sentimentResult = await analyzeSentiment(translatedPostText);
-    console.log("Sentiment API Result:", JSON.stringify(sentimentResult, null, 2));
+    console.log("Sentiment API Result:", sentimentResult);
 
-    const predictions = sentimentResult[0]?.predictions;
-      if (!predictions || predictions.length === 0) {
-        throw new Error("No predictions found in sentiment analysis result");
-      }
-  
-      const prediction = predictions[0]?.prediction || "neutral";
-      console.log("Prediction:", prediction);
+    const sentiment = sentimentResult.sentiment;
+
+    if (!sentiment || sentiment.length === 0) {
+      throw new Error("No sentiment found in sentiment analysis result");
+    }
+    const formattedSentiment = sentiment.toLowerCase();
+    console.log("Formatted Sentiment:", formattedSentiment);
      if (!mongoose.isValidObjectId(req.params.postId) || !mongoose.isValidObjectId(userId)) {
          return res.status(400).send('Invalid Event or User ID');
      } 
@@ -71,7 +71,7 @@ router.get('/:postId/comments', async (req, res) => {
              return res.status(404).send('Event not found');
          }
  
-         post.comments.push({ user: userId, text, sentiment: prediction });
+         post.comments.push({ user: userId, text, sentiment: formattedSentiment });
          await post.save();
  
          res.status(201).json({ message: 'Comment added successfully', comments: post.comments });
@@ -124,48 +124,86 @@ router.get('/:postId/comments', async (req, res) => {
     });
   };
   
-  const analyzeSentiment = (postText) => {
-    return new Promise((resolve, reject) => {
-      const options = {
-        method: "POST",
-        hostname: "sentiment-analysis9.p.rapidapi.com",
-        path: "/sentiment",
-        headers: {
-          "x-rapidapi-key": "98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b",
-          "x-rapidapi-host": "sentiment-analysis9.p.rapidapi.com",
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-      };
+  // const analyzeSentiment = (postText) => {
+  //   return new Promise((resolve, reject) => {
+  //     const options = {
+  //       method: "POST",
+  //       hostname: "sentiment-analysis9.p.rapidapi.com",
+  //       path: "/sentiment",
+  //       headers: {
+  //         "x-rapidapi-key": "98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b",
+  //         "x-rapidapi-host": "sentiment-analysis9.p.rapidapi.com",
+  //         "Content-Type": "application/json",
+  //         Accept: "application/json",
+  //       },
+  //     };
   
-      const req = http.request(options, (res) => {
-        const chunks = [];
+  //     const req = http.request(options, (res) => {
+  //       const chunks = [];
   
-        res.on("data", (chunk) => {
-          chunks.push(chunk);
-        });
+  //       res.on("data", (chunk) => {
+  //         chunks.push(chunk);
+  //       });
   
-        res.on("end", () => {
-          const body = Buffer.concat(chunks).toString();
-          resolve(JSON.parse(body));
-        });
-      });
+  //       res.on("end", () => {
+  //         const body = Buffer.concat(chunks).toString();
+  //         resolve(JSON.parse(body));
+  //       });
+  //     });
   
-      req.on("error", (err) => reject(err));
+  //     req.on("error", (err) => reject(err));
   
-      req.write(
-        JSON.stringify([
-          {
-            id: "1",
-            language: "en",
-            text: postText,
-          },
-        ])
-      );
-      req.end();
-    });
-  };
+  //     req.write(
+  //       JSON.stringify([
+  //         {
+  //           id: "1",
+  //           language: "en",
+  //           text: postText,
+  //         },
+  //       ])
+  //     );
+  //     req.end();
+  //   });
+  // };
+  
+const analyzeSentiment = (translatedPostText) => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      method: 'POST',
+      hostname: 'sentimentsnap-api3.p.rapidapi.com',
+      port: null,
+      path: '/v1/sentiment',
+      headers: {
+        'x-rapidapi-key': '98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b',
+        'x-rapidapi-host': 'sentimentsnap-api3.p.rapidapi.com',
+        'Content-Type': 'application/json'
+      }
+    };
+    
+    const req = http.request(options, (res) => {
+      let data = '';
 
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const jsonResponse = JSON.parse(data);
+          console.log("Sentiment API Response:", jsonResponse);
+          resolve(jsonResponse);
+        } catch (error) {
+          reject(`Error parsing sentiment API response: ${error.message}`);
+        }
+      });
+    });
+
+    req.on('error', (error) => reject(`HTTP request error: ${error.message}`));
+
+    req.write(JSON.stringify({ text: translatedPostText }));
+    req.end();
+  });
+};
 
 router.post('/', uploadOptions.array('images', 10), async (req, res) => {
     console.log('Create Post Request Body:', req.body);
@@ -176,15 +214,15 @@ router.post('/', uploadOptions.array('images', 10), async (req, res) => {
     console.log("Translated Post Text:", translatedPostText);
 
     const sentimentResult = await analyzeSentiment(translatedPostText);
-    console.log("Sentiment API Result:", JSON.stringify(sentimentResult, null, 2));
+    console.log("Sentiment API Result:", sentimentResult);
 
-    const predictions = sentimentResult[0]?.predictions;
-      if (!predictions || predictions.length === 0) {
-        throw new Error("No predictions found in sentiment analysis result");
-      }
-  
-      const prediction = predictions[0]?.prediction || "neutral";
-      console.log("Prediction:", prediction);
+    const sentiment = sentimentResult.sentiment;
+
+    if (!sentiment || sentiment.length === 0) {
+      throw new Error("No sentiment found in sentiment analysis result");
+    }
+    const formattedSentiment = sentiment.toLowerCase();
+    console.log("Formatted Sentiment:", formattedSentiment);
 
     if (typeof tags === "string") {
         try {
@@ -243,7 +281,7 @@ router.post('/', uploadOptions.array('images', 10), async (req, res) => {
         tags: req.body.tags,
         postText: req.body.postText,
         images: imageUrls,
-        sentiment: prediction,
+        sentiment: formattedSentiment,
     });
 
     try {

@@ -58,47 +58,87 @@ const translateToEnglish = (feedback) => {
     });
   };
   
-  const analyzeSentiment = (feedback) => {
+  // const analyzeSentiment = (feedback) => {
+  //   return new Promise((resolve, reject) => {
+  //     const options = {
+  //       method: "POST",
+  //       hostname: "sentiment-analysis9.p.rapidapi.com",
+  //       path: "/sentiment",
+  //       headers: {
+  //         "x-rapidapi-key": "98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b",
+  //         "x-rapidapi-host": "sentiment-analysis9.p.rapidapi.com",
+  //         "Content-Type": "application/json",
+  //         Accept: "application/json",
+  //       },
+  //     };
+  
+  //     const req = http.request(options, (res) => {
+  //       const chunks = [];
+  
+  //       res.on("data", (chunk) => {
+  //         chunks.push(chunk);
+  //       });
+  
+  //       res.on("end", () => {
+  //         const body = Buffer.concat(chunks).toString();
+  //         resolve(JSON.parse(body));
+  //       });
+  //     });
+  
+  //     req.on("error", (err) => reject(err));
+  
+  //     req.write(
+  //       JSON.stringify([
+  //         {
+  //           id: "1",
+  //           language: "en",
+  //           text: feedback,
+  //         },
+  //       ])
+  //     );
+  //     req.end();
+  //   });
+  // };
+
+  const analyzeSentiment = (translatedFeedback) => {
     return new Promise((resolve, reject) => {
       const options = {
-        method: "POST",
-        hostname: "sentiment-analysis9.p.rapidapi.com",
-        path: "/sentiment",
+        method: 'POST',
+        hostname: 'sentimentsnap-api3.p.rapidapi.com',
+        port: null,
+        path: '/v1/sentiment',
         headers: {
-          "x-rapidapi-key": "98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b",
-          "x-rapidapi-host": "sentiment-analysis9.p.rapidapi.com",
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+          'x-rapidapi-key': '98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b',
+          'x-rapidapi-host': 'sentimentsnap-api3.p.rapidapi.com',
+          'Content-Type': 'application/json'
+        }
       };
-  
+      
       const req = http.request(options, (res) => {
-        const chunks = [];
+        let data = '';
   
-        res.on("data", (chunk) => {
-          chunks.push(chunk);
+        res.on('data', (chunk) => {
+          data += chunk;
         });
   
-        res.on("end", () => {
-          const body = Buffer.concat(chunks).toString();
-          resolve(JSON.parse(body));
+        res.on('end', () => {
+          try {
+            const jsonResponse = JSON.parse(data);
+            console.log("Sentiment API Response:", jsonResponse);
+            resolve(jsonResponse);
+          } catch (error) {
+            reject(`Error parsing sentiment API response: ${error.message}`);
+          }
         });
       });
   
-      req.on("error", (err) => reject(err));
+      req.on('error', (error) => reject(`HTTP request error: ${error.message}`));
   
-      req.write(
-        JSON.stringify([
-          {
-            id: "1",
-            language: "en",
-            text: feedback,
-          },
-        ])
-      );
+      req.write(JSON.stringify({ text: translatedFeedback }));
       req.end();
     });
   };
+  
   
   // Create feedback
   router.post('/', async (req, res) => {
@@ -109,22 +149,23 @@ const translateToEnglish = (feedback) => {
       console.log("Translated Feedback:", translatedFeedback);
   
       const sentimentResult = await analyzeSentiment(translatedFeedback);
-      console.log("Sentiment API Result:", JSON.stringify(sentimentResult, null, 2));
-  
-      const predictions = sentimentResult[0]?.predictions;
-      if (!predictions || predictions.length === 0) {
-        throw new Error("No predictions found in sentiment analysis result");
-      }
-  
-      const prediction = predictions[0]?.prediction || "neutral";
-      console.log("Prediction:", prediction);
-  
+    console.log("Sentiment API Result:", sentimentResult);
+
+    const sentiment = sentimentResult.sentiment;
+
+    if (!sentiment || sentiment.length === 0) {
+      throw new Error("No sentiment found in sentiment analysis result");
+    }
+    const formattedSentiment = sentiment.toLowerCase();
+    console.log("Formatted Sentiment:", formattedSentiment);
+
+
       const newRating = new Rating({
         eventId,
         userId,
         score,
         feedback,
-        sentiment: prediction,
+        sentiment: formattedSentiment,
       });
   
       const savedRating = await newRating.save();
