@@ -685,44 +685,231 @@ const translateToEnglish = (text) => {
 //   });
 // };
 
+// const analyzeSentiment = (translatedCommentText) => {
+//   return new Promise((resolve, reject) => {
+//     const options = {
+//       method: 'POST',
+//       hostname: 'sentimentsnap-api3.p.rapidapi.com',
+//       port: null,
+//       path: '/v1/sentiment',
+//       headers: {
+//         'x-rapidapi-key': '98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b',
+//         'x-rapidapi-host': 'sentimentsnap-api3.p.rapidapi.com',
+//         'Content-Type': 'application/json'
+//       }
+//     };
+    
+//     const req = http.request(options, (res) => {
+//       let data = '';
+
+//       res.on('data', (chunk) => {
+//         data += chunk;
+//       });
+
+//       res.on('end', () => {
+//         try {
+//           const jsonResponse = JSON.parse(data);
+//           console.log("Sentiment API Response:", jsonResponse);
+//           resolve(jsonResponse);
+//         } catch (error) {
+//           reject(`Error parsing sentiment API response: ${error.message}`);
+//         }
+//       });
+//     });
+
+//     req.on('error', (error) => reject(`HTTP request error: ${error.message}`));
+
+//     req.write(JSON.stringify({ text: translatedCommentText }));
+//     req.end();
+//   });
+// };
+
+// const analyzeSentiment = (translatedCommentText) => {
+//   return new Promise((resolve, reject) => {
+//     const options = {
+//       method: 'POST',
+//       hostname: 'sentiment-analysis9.p.rapidapi.com',
+//       port: null,
+//       path: '/sentiment',
+//       headers: {
+//         'x-rapidapi-key': '98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b',
+//         'x-rapidapi-host': 'sentiment-analysis9.p.rapidapi.com',
+//         'Content-Type': 'application/json',
+//         Accept: 'application/json'
+//       }
+//     };
+    
+//     const req = http.request(options, function (res) {
+//       const chunks = [];
+    
+//       res.on('data', function (chunk) {
+//         chunks.push(chunk);
+//       });
+    
+//       res.on('end', function () {
+//         const body = Buffer.concat(chunks);
+//         console.log(body.toString());
+//       });
+//     });
+    
+//     req.write(JSON.stringify([
+//       {
+//         id: '1',
+//         language: 'en',
+//         text: translatedCommentText,
+//       }
+//     ]));
+//     req.end();
+//   });
+// };
+
 const analyzeSentiment = (translatedCommentText) => {
   return new Promise((resolve, reject) => {
     const options = {
       method: 'POST',
-      hostname: 'sentimentsnap-api3.p.rapidapi.com',
+      hostname: 'sentiment-analysis9.p.rapidapi.com',
       port: null,
-      path: '/v1/sentiment',
+      path: '/sentiment',
       headers: {
         'x-rapidapi-key': '98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b',
-        'x-rapidapi-host': 'sentimentsnap-api3.p.rapidapi.com',
-        'Content-Type': 'application/json'
-      }
+        'x-rapidapi-host': 'sentiment-analysis9.p.rapidapi.com',
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
     };
-    
-    const req = http.request(options, (res) => {
-      let data = '';
 
-      res.on('data', (chunk) => {
-        data += chunk;
+    const req = http.request(options, function (res) {
+      const chunks = [];
+
+      res.on('data', function (chunk) {
+        chunks.push(chunk);
       });
 
-      res.on('end', () => {
+      res.on('end', function () {
+        const body = Buffer.concat(chunks);
         try {
-          const jsonResponse = JSON.parse(data);
-          console.log("Sentiment API Response:", jsonResponse);
-          resolve(jsonResponse);
+          const json = JSON.parse(body.toString());
+          // ✅ Resolve the prediction value directly
+          const prediction = json[0]?.predictions[0]?.prediction || "neutral";
+          resolve({ sentiment: prediction });
         } catch (error) {
-          reject(`Error parsing sentiment API response: ${error.message}`);
+          reject("Failed to parse sentiment API response");
         }
       });
     });
 
-    req.on('error', (error) => reject(`HTTP request error: ${error.message}`));
+    req.on('error', (e) => {
+      reject(`Error with sentiment API: ${e.message}`);
+    });
 
-    req.write(JSON.stringify({ text: translatedCommentText }));
+    req.write(
+      JSON.stringify([
+        {
+          id: "1",
+          language: "en",
+          text: translatedCommentText,
+        },
+      ])
+    );
     req.end();
   });
 };
+
+
+// Route to handle posting comments
+// router.post('/:eventId/comments', async (req, res) => {
+//   const { text, userId } = req.body;
+
+//   const translatedCommentText = await translateToEnglish(text);
+//     console.log("Translated Post Text:", translatedCommentText);
+
+//     const sentimentResult = await analyzeSentiment(translatedCommentText);
+//     console.log("Sentiment API Result:", sentimentResult);
+
+//     const sentiment = sentimentResult.sentiment;
+
+//     if (!sentiment || sentiment.length === 0) {
+//       throw new Error("No sentiment found in sentiment analysis result");
+//     }
+//     const formattedSentiment = sentiment.toLowerCase();
+//     console.log("Formatted Sentiment:", formattedSentiment);
+    
+
+//   if (!mongoose.isValidObjectId(req.params.eventId) || !mongoose.isValidObjectId(userId)) {
+//       return res.status(400).send('Invalid Event or User ID');
+//   }
+
+//   try {
+//       const event = await Event.findById(req.params.eventId);
+//       if (!event) {
+//           return res.status(404).send('Event not found');
+//       }
+
+//       const user = await User.findById(userId);
+//       if (!user) {
+//           return res.status(404).send('User not found');
+//       }
+
+//       // Check if the user is currently under cooldown
+//       const currentTime = new Date();
+//       console.log("Current Time", currentTime)
+
+//       if (user.commentCooldown && new Date(user.commentCooldown) < currentTime) {
+//         user.warningCount = 0;
+//         user.commentCooldown = null;
+//         await user.save();
+//       }
+
+//       if (user.commentCooldown && currentTime < new Date(user.commentCooldown)) {
+//           const timeRemaining = Math.ceil((new Date(user.commentCooldown) - currentTime) / 1000 / 60);
+//           return res.status(400).send(`You are currently under cooldown. Please wait ${timeRemaining} minutes before commenting again.`);
+//       }
+
+//       // Find the user's last few comments
+//       const userComments = event.comments.filter(comment => comment.user.toString() === userId);
+//       const lastComment = userComments[userComments.length - 1];
+
+//       if (lastComment && (currentTime - new Date(lastComment.createdAt) < MAX_COMMENT_INTERVAL)) {
+//           // Increment the warning count
+//           user.warningCount += 1;
+//           console.log("Warning Count:", user.warningCount);
+
+//           // If the warning count exceeds the threshold, apply cooldown
+//           if (user.warningCount >= 2) {
+//               const cooldownTime = COOLDOWN_PERIODS.mild;
+//               user.commentCooldown = new Date(Date.now() + cooldownTime); 
+//               await user.save();
+
+//               return res.status(400).send(`You are commenting too quickly. You are now blocked from commenting for ${cooldownTime / (1000 * 60)} minutes.`);
+//           }
+
+//           await user.save();
+//           return res.status(400).send('You are commenting too quickly. Please wait a moment before posting again.');
+//       }
+
+//       // Check if user is spamming (same comment repeatedly)
+//       const recentComments = userComments.filter(comment => (currentTime - new Date(comment.createdAt)) < MAX_COMMENT_INTERVAL);
+//       const similarComments = recentComments.filter(comment => comment.text.trim() === text.trim());
+
+//       if (similarComments.length >= SPAM_THRESHOLD) {
+//           // Flag user for spamming and apply a cooldown period based on intensity
+//           const cooldownTime = determineCooldown(recentComments.length);
+//           await applyCooldown(userId, cooldownTime);
+
+//           return res.status(400).send(`You are spamming comments. You are blocked from commenting for ${cooldownTime / (1000 * 60)} minutes.`);
+//       }
+
+//       // Add the new comment to the event
+//       event.comments.push({ user: userId, text, sentiment: formattedSentiment,
+//       });
+//       await event.save();
+
+//       res.status(201).json({ message: 'Comment added successfully', comments: event.comments });
+//   } catch (error) {
+//       // Instead of logging the error to console, just send a generic error message to the client
+//       res.status(500).json({ error: 'Error posting comment. Please try again later.' });
+//   }
+// });
 
 // Route to handle posting comments
 router.post('/:eventId/comments', async (req, res) => {

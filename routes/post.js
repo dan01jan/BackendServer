@@ -166,41 +166,93 @@ router.get('/:postId/comments', async (req, res) => {
   //   });
   // };
   
+// const analyzeSentiment = (translatedPostText) => {
+//   return new Promise((resolve, reject) => {
+//     const options = {
+//       method: 'POST',
+//       hostname: 'sentimentsnap-api3.p.rapidapi.com',
+//       port: null,
+//       path: '/v1/sentiment',
+//       headers: {
+//         'x-rapidapi-key': '98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b',
+//         'x-rapidapi-host': 'sentimentsnap-api3.p.rapidapi.com',
+//         'Content-Type': 'application/json'
+//       }
+//     };
+    
+//     const req = http.request(options, (res) => {
+//       let data = '';
+
+//       res.on('data', (chunk) => {
+//         data += chunk;
+//       });
+
+//       res.on('end', () => {
+//         try {
+//           const jsonResponse = JSON.parse(data);
+//           console.log("Sentiment API Response:", jsonResponse);
+//           resolve(jsonResponse);
+//         } catch (error) {
+//           reject(`Error parsing sentiment API response: ${error.message}`);
+//         }
+//       });
+//     });
+
+//     req.on('error', (error) => reject(`HTTP request error: ${error.message}`));
+
+//     req.write(JSON.stringify({ text: translatedPostText }));
+//     req.end();
+//   });
+// };
+
 const analyzeSentiment = (translatedPostText) => {
   return new Promise((resolve, reject) => {
     const options = {
       method: 'POST',
-      hostname: 'sentimentsnap-api3.p.rapidapi.com',
+      hostname: 'sentiment-analysis9.p.rapidapi.com',
       port: null,
-      path: '/v1/sentiment',
+      path: '/sentiment',
       headers: {
         'x-rapidapi-key': '98387a8ec0mshfe04690e0a2f5edp121879jsn8607d7ff8c1b',
-        'x-rapidapi-host': 'sentimentsnap-api3.p.rapidapi.com',
-        'Content-Type': 'application/json'
-      }
+        'x-rapidapi-host': 'sentiment-analysis9.p.rapidapi.com',
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
     };
-    
-    const req = http.request(options, (res) => {
-      let data = '';
 
-      res.on('data', (chunk) => {
-        data += chunk;
+    const req = http.request(options, function (res) {
+      const chunks = [];
+
+      res.on('data', function (chunk) {
+        chunks.push(chunk);
       });
 
-      res.on('end', () => {
+      res.on('end', function () {
+        const body = Buffer.concat(chunks);
         try {
-          const jsonResponse = JSON.parse(data);
-          console.log("Sentiment API Response:", jsonResponse);
-          resolve(jsonResponse);
+          const json = JSON.parse(body.toString());
+          // ✅ Resolve the prediction value directly
+          const prediction = json[0]?.predictions[0]?.prediction || "neutral";
+          resolve({ sentiment: prediction });
         } catch (error) {
-          reject(`Error parsing sentiment API response: ${error.message}`);
+          reject("Failed to parse sentiment API response");
         }
       });
     });
 
-    req.on('error', (error) => reject(`HTTP request error: ${error.message}`));
+    req.on('error', (e) => {
+      reject(`Error with sentiment API: ${e.message}`);
+    });
 
-    req.write(JSON.stringify({ text: translatedPostText }));
+    req.write(
+      JSON.stringify([
+        {
+          id: "1",
+          language: "en",
+          text: translatedPostText,
+        },
+      ])
+    );
     req.end();
   });
 };
