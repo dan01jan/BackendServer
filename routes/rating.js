@@ -229,6 +229,40 @@ const translateToEnglish = (feedback) => {
     }
   });
 
+  router.get(
+    '/event/:eventId/sentiments',
+    async (req, res) => {
+      const { eventId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        return res.status(400).json({ message: 'Invalid eventId format' });
+      }
+  
+      try {
+        const ratings = await Rating.find({ eventId })
+          .populate('userId', 'name surname')
+          .select('sentiment feedback score');
+  
+        const formatted = ratings.map(r => {
+          const name = r.userId
+            ? `${r.userId.name} ${r.userId.surname}`
+            : 'Unknown User';
+          return {
+            user:      name,
+            sentiment: r.sentiment,
+            feedback:  r.feedback,
+            score:     r.score
+          };
+        });
+  
+        return res.json(formatted);
+      } catch (err) {
+        console.error('Error fetching event sentiments:', err);
+        return res.status(500).json({ message: 'Server error' });
+      }
+    }
+  );
+  
+
   // For Charts, count selected event's sentiments, sentiment datatable, and for the event's scores
   router.get('/:selectedEvent', async (req, res) => {
     const { type } = req.query;
