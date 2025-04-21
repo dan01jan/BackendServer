@@ -566,13 +566,19 @@ router.get('/event/events', async (req, res) => {
 // Kunin ang comments
 router.get('/:eventId/comments', async (req, res) => {
   try {
-      const event = await Event.findById(req.params.eventId).populate('comments.user', 'name'); // Populate user names
-      if (!event) return res.status(404).send('Event not found');
-      res.json(event.comments);
+    const event = await Event.findById(req.params.eventId).populate(
+      'comments.user',
+      'name surname image' // Include name, surname, and image
+    );
+
+    if (!event) return res.status(404).send('Event not found');
+
+    res.json(event.comments);
   } catch (error) {
-      res.status(500).json({ error: 'Error retrieving comments', details: error.message });
+    res.status(500).json({ error: 'Error retrieving comments', details: error.message });
   }
 });
+
 
 // Get overall sentiment for an event
 router.get('/:eventId/sentiment', async (req, res) => {
@@ -995,7 +1001,7 @@ router.post('/:eventId/comments', async (req, res) => {
       }
 
       // Add the new comment to the event
-      event.comments.push({ user: userId, text, sentiment: formattedSentiment,
+      event.comments.push({ user: userId, text, sentiment: formattedSentiment, 
       });
       await event.save();
 
