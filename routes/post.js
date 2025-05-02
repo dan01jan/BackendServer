@@ -35,7 +35,7 @@ router.get('/tags', (req, res) => {
 
 router.get('/:postId/comments', async (req, res) => {
     try {
-        const post = await Post.findById(req.params.postId).populate('comments.user', 'name'); // Populate user names
+        const post = await Post.findById(req.params.postId).populate('comments.user', 'name surname image'); // Populate user names
         if (!post) return res.status(404).send('Post not found');
         res.json(post.comments);
     } catch (error) {
