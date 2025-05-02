@@ -1047,5 +1047,27 @@ router.get("/events/upcoming", async (req, res) => {
   }
 });
 
+// Route to fetch events based on organization
+router.get('/events/:organization', async (req, res) => {
+  try {
+      const organizationName = req.params.organization;
+      console.log(`Fetching events for organization: ${organizationName}`); // Log the organization name
+
+      // Find events by organization name
+      const events = await Event.find({ organization: organizationName });
+
+      if (!events || events.length === 0) {
+          console.log(`No events found for organization: ${organizationName}`); // Log if no events found
+          return res.status(404).json({ message: 'No events found for this organization' });
+      }
+
+      res.status(200).json(events);
+  } catch (error) {
+      console.error(`Error fetching events for organization: ${organizationName}`, error); // Log the error
+      res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+
 
 module.exports=router;

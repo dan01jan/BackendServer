@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');  // Import mongoose
 const Organization = require('../models/organization');
 const { User } = require('../models/user');
+const { Event } = require('../models/event');
 const cloudinary = require('../utils/cloudinary');
 const uploadOptions = require('../utils/multer');
 const streamifier = require('streamifier');
@@ -466,6 +467,39 @@ router.get('/get/count', async (req, res) => {
   } catch (error) {
     console.error('Error fetching organization count:', error);
     res.status(500).json({ message: 'Error fetching organization count', error: error.message });
+  }
+});
+
+// GET /api/organizations/:id/events
+router.get('/:id/events', async (req, res) => {
+  const organizationId = req.params.id;
+
+  try {
+    // 1️⃣ Find the organization by ID
+    const organization = await Organization.findById(organizationId);
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    // 2️⃣ Find events where event.organization === organization.name
+    const events = await Event.find({ organization: organization.name });
+
+    // 3️⃣ Return both organization info and its events
+    res.json({
+      organization: {
+        _id: organization._id,
+        name: organization.name,
+        description: organization.description,
+        department: organization.department,
+        image: organization.image,
+        category: organization.category,
+      },
+      events: events
+    });
+
+  } catch (error) {
+    console.error('Error fetching organization events:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
