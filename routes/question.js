@@ -177,7 +177,7 @@ router.post('/bulk-create-questions', async (req, res) => {
 });
 
 
-// Update Question
+// Update Question and populate Trait and Type
 router.put('/:id', async (req, res) => {
   try {
     const { question, translated, traitId, typeId } = req.body;
@@ -185,13 +185,17 @@ router.put('/:id', async (req, res) => {
       req.params.id,
       { question, translated, traitId, typeId },
       { new: true }
-    );
+    )
+    .populate('traitId', 'trait')
+    .populate('typeId', 'eventType');
+
     if (!updatedQuestion) return res.status(404).send('Question not found.');
     res.send(updatedQuestion);
   } catch (error) {
     res.status(500).send('Error updating question: ' + error.message);
   }
 });
+
 
 // Delete Question
 router.delete('/:id', async (req, res) => {

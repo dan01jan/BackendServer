@@ -11,8 +11,9 @@ const questionSchema = mongoose.Schema({
     },
     scale: { 
         type: [Number], 
-        required: true 
-    },
+        required: true,
+        default: [1, 2, 3, 4, 5] 
+      },      
     traitId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Trait',
