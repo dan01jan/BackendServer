@@ -235,8 +235,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Modified Eligible Officers Route
-// Get eligible officers for an organization (from the Organization document)
+// Get eligible officers dynamically from User memberships
 router.get("/eligible-officers/:organizationId", async (req, res) => {
   try {
     const { organizationId } = req.params;
@@ -246,21 +245,23 @@ router.get("/eligible-officers/:organizationId", async (req, res) => {
       return res.status(400).json({ message: "Invalid organization ID" });
     }
 
-    // Fetch the organization by ID and select only the officers field
-    const organization = await Organization.findById(organizationId).select('officers');
+    // Find users where they have an organization entry matching organizationId with officer role and isOfficer true
+    const officers = await User.find({
+      organizations: {
+        $elemMatch: {
+          organization: organizationId,
+          role: 'Officer',
+          isOfficer: true
+        }
+      }
+    }).select('name surname email image organizations');
 
-    if (!organization) {
-      return res.status(404).json({ message: "Organization not found" });
-    }
-
-    // Return the officers array from the organization document
-    res.status(200).json(organization.officers);
+    res.status(200).json(officers);
   } catch (error) {
-    console.error("Error fetching officers:", error.message);
-    res.status(500).json({ message: "Error fetching officers", error: error.message });
+    console.error("Error fetching eligible officers:", error.message);
+    res.status(500).json({ message: "Error fetching eligible officers", error: error.message });
   }
 });
-
 
 // Get Organization by ID
 router.get('/:id', async (req, res) => {
@@ -348,7 +349,24 @@ router.put('/:id', uploadOptions.single('image'), async (req, res) => {
     // Update fields only if they are provided in the request
     if (name) existingOrganization.name = name;
     if (description) existingOrganization.description = description;
-    if (officers) existingOrganization.officers = officers;
+    if (officers !== undefined && officers !== "") {
+      try {
+        const parsedOfficers = JSON.parse(officers);
+    
+        if (!Array.isArray(parsedOfficers)) {
+          return res.status(400).json({ message: "Invalid officers format. Expected a JSON array." });
+        }
+    
+        const allOfficersValid = parsedOfficers.every(officer => officer.userId);
+        if (!allOfficersValid) {
+          return res.status(400).json({ message: "Each officer must have a userId." });
+        }
+    
+        existingOrganization.officers = parsedOfficers;
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid officers format. Expected JSON array." });
+      }
+    }
     if (imageUrl !== existingOrganization.image) existingOrganization.image = imageUrl;
     if (department !== existingOrganization.department) existingOrganization.department = department;
 
