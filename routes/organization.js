@@ -235,33 +235,287 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get eligible officers dynamically from User memberships
-router.get("/eligible-officers/:organizationId", async (req, res) => {
+router.get('/all-officers', async (req, res) => {
   try {
-    const { organizationId } = req.params;
+    const organizations = await Organization.find({});
+    const allOfficers = organizations.flatMap(org => org.officers);
+    res.status(200).json(allOfficers);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch officers', error: err.message });
+  }
+});
 
-    // Validate organizationId
-    if (!mongoose.Types.ObjectId.isValid(organizationId)) {
-      return res.status(400).json({ message: "Invalid organization ID" });
+
+// Get eligible officers dynamically from User memberships
+router.get('/eligible-officers/:orgId', async (req, res) => {
+  try {
+    const { orgId } = req.params;
+
+    const organization = await Organization.findById(orgId);
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
     }
 
-    // Find users where they have an organization entry matching organizationId with officer role and isOfficer true
-    const officers = await User.find({
+    // 1. Officers from the User collection
+    const users = await User.find({
       organizations: {
         $elemMatch: {
-          organization: organizationId,
+          organization: orgId,
           role: 'Officer',
           isOfficer: true
         }
       }
-    }).select('name surname email image organizations');
+    }).select('name surname email _id');
 
-    res.status(200).json(officers);
-  } catch (error) {
-    console.error("Error fetching eligible officers:", error.message);
-    res.status(500).json({ message: "Error fetching eligible officers", error: error.message });
+    // 2. Officers from the Organization schema
+    const orgOfficers = organization.officers || [];
+
+    // 3. Create a map of userId to user object for fast lookup
+    const userMap = new Map(users.map(user => [user._id.toString(), user]));
+
+    // 4. Merge both lists, ensuring no duplicates
+    const merged = [];
+
+    // Add all officers from the Organization schema
+    for (const officer of orgOfficers) {
+      const user = userMap.get(officer.userId?.toString());
+      merged.push({
+        _id: officer.userId || null,
+        name: user?.name || officer.name || '',
+        surname: user?.surname || officer.surname || '',
+        email: user?.email || officer.email || '',
+        position: officer.position || '',
+        image: officer.image || '',
+      });
+    }
+
+    // Add remaining officer users who were not in the orgOfficers list
+    for (const user of users) {
+      const alreadyIncluded = orgOfficers.some(
+        (officer) => officer.userId?.toString() === user._id.toString()
+      );
+      if (!alreadyIncluded) {
+        merged.push({
+          _id: user._id,
+          name: user.name,
+          surname: user.surname,
+          email: user.email,
+          position: '',
+          image: '',
+        });
+      }
+    }
+
+    res.status(200).json(merged);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch eligible officers', error: err.message });
   }
 });
+
+
+// Route to delete (remove) a single officer and sync with User model
+router.delete('/:id/officers/:userId', async (req, res) => {
+  try {
+    const organizationId = req.params.id;
+    const userId = req.params.userId;
+
+    // 1. Remove the officer from the organization.officers array
+    const updatedOrganization = await Organization.findByIdAndUpdate(
+      organizationId,
+      { $pull: { officers: { userId: userId } } },
+      { new: true }
+    ).select('officers image name department');
+
+    if (!updatedOrganization) {
+      return res.status(404).json({ message: 'Organization not found.' });
+    }
+
+    // 2. Update the user's organizations array (flip from Officer → User)
+    const user = await User.findById(userId);
+    if (user) {
+      const membership = user.organizations.find(org => org.organization.toString() === organizationId);
+      if (membership) {
+        membership.role = 'User';
+        membership.isOfficer = false;
+        membership.department = updatedOrganization.department; // (optional: keep dept in sync)
+        await user.save();
+      }
+    }
+
+    res.status(200).json({
+      message: 'Officer removed successfully.',
+      officers: updatedOrganization.officers,
+      image: updatedOrganization.image
+    });
+
+  } catch (error) {
+    console.error('Error removing officer:', error);
+    res.status(500).json({ message: 'Error removing officer', error: error.message });
+  }
+});
+
+// Route to update a single officer (PATCH /organizations/:orgId/officers/:userId)
+router.patch('/:orgId/officers/:userId', uploadOptions.single('image'), async (req, res) => {
+  // Extract orgId and userId from request parameters
+  const { orgId, userId } = req.params; // <-- Here we extract userId
+
+  // Find the organization
+  const organization = await Organization.findById(orgId);
+  if (!organization) {
+    return res.status(404).json({ message: 'Organization not found' });
+  }
+
+  // Find the officer in the officers array
+  const officerIndex = organization.officers.findIndex(off => off.userId.toString() === userId);
+  if (officerIndex === -1) {
+    return res.status(404).json({ message: 'Officer not found in this organization' });
+  }
+
+  // Update name/position if provided
+  const { name, position } = req.body; // Make sure you're getting name and position from the request body
+  if (name !== undefined) organization.officers[officerIndex].name = name;
+  if (position !== undefined) organization.officers[officerIndex].position = position;
+
+  // If new image uploaded → upload to Cloudinary
+  if (req.file) {
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { resource_type: 'image' },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      streamifier.createReadStream(req.file.buffer).pipe(stream);
+    });
+    organization.officers[officerIndex].image = result.secure_url;
+  }
+
+  await organization.save();
+  res.status(200).json({ message: 'Officer updated successfully', officer: organization.officers[officerIndex] });
+});
+
+// Route to update and delete officers and sync with User model
+router.get('/eligible-officers/:orgId', async (req, res) => {
+  try {
+    const { orgId } = req.params;
+
+    const organization = await Organization.findById(orgId);
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    // Get all User-based officers for this organization
+    const users = await User.find({
+      organizations: {
+        $elemMatch: {
+          organization: orgId,
+          role: 'Officer',
+          isOfficer: true
+        }
+      }
+    }).select('_id name surname email image');
+
+    const orgOfficers = organization.officers || [];
+
+    // Map userId -> user
+    const userMap = new Map(users.map(user => [user._id.toString(), user]));
+
+    const merged = [];
+
+    // Add all officers from Organization.officers list
+    for (const officer of orgOfficers) {
+      const user = userMap.get(officer.userId?.toString());
+      merged.push({
+        _id: officer.userId || null,
+        name: user?.name || officer.name || '',
+        surname: user?.surname || officer.surname || '',
+        email: user?.email || officer.email || '',
+        position: officer.position || '',
+        image: user?.image || officer.image || '',  // prefer User.image
+      });
+    }
+
+    // Add officer users not in Organization.officers
+    for (const user of users) {
+      const alreadyIncluded = orgOfficers.some(
+        (officer) => officer.userId?.toString() === user._id.toString()
+      );
+      if (!alreadyIncluded) {
+        merged.push({
+          _id: user._id,
+          name: user.name,
+          surname: user.surname,
+          email: user.email,
+          position: '',
+          image: user.image || '',
+        });
+      }
+    }
+
+    res.status(200).json(merged);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch eligible officers', error: err.message });
+  }
+});
+
+
+// Route to add a new officer to the organization (POST /organizations/:orgId/officers)
+router.post('/:orgId/officers', uploadOptions.single('image'), async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    const { name, position, userId } = req.body;
+
+    // Validate that the officer has a valid userId
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    // Find the organization
+    const organization = await Organization.findById(orgId);
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    // Create new officer object
+    const newOfficer = {
+      userId,
+      name,
+      position,
+      image: null, // default image field (you can add this if image upload is optional)
+    };
+
+    // If a new image was uploaded, handle Cloudinary upload
+    if (req.file) {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { resource_type: 'image' },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+      newOfficer.image = result.secure_url;
+    }
+
+    // Add the new officer to the organization's officers array
+    organization.officers.push(newOfficer);
+
+    // Save the organization
+    await organization.save();
+
+    res.status(200).json({ message: 'New officer added successfully', officer: newOfficer });
+  } catch (error) {
+    console.error('Error adding new officer:', error);
+    res.status(500).json({ message: 'Error adding new officer', error: error.message });
+  }
+});
+
+
 
 // Get Organization by ID
 router.get('/:id', async (req, res) => {
@@ -413,67 +667,6 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting organization:', error);
     res.status(500).json({ message: 'Error deleting organization', error: error.message });
-  }
-});
-
-// Route to update and delete officers only
-router.patch('/:id/officers', uploadOptions.any(), async (req, res) => {
-  try {
-    const organizationId = req.params.id;
-    // Check if req.body.officers is a string (from FormData) or already an object (from JSON)
-    const officersData = typeof req.body.officers === 'string'
-      ? JSON.parse(req.body.officers)
-      : req.body.officers;
-    
-    // Build a map from file field names to file objects from req.files.
-    const filesMap = {};
-    if (req.files) {
-      req.files.forEach(file => {
-        filesMap[file.fieldname] = file;
-      });
-    }
-
-    // For each officer, if a file is uploaded for that officer (e.g. field "image_0" for first officer),
-    // upload the file to Cloudinary and replace the image field with the secure URL.
-    const processedOfficers = await Promise.all(
-      officersData.map(async (officer, index) => {
-        const fileField = `image_${index}`;
-        if (filesMap[fileField]) {
-          const file = filesMap[fileField];
-          const result = await new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-              { resource_type: 'image' },
-              (error, result) => {
-                if (error) reject(error);
-                else resolve(result);
-              }
-            );
-            streamifier.createReadStream(file.buffer).pipe(stream);
-          });
-          officer.image = result.secure_url;
-        }
-        return officer;
-      })
-    );
-
-    // Update the organization with the processed officers array. 
-    const updatedOrganization = await Organization.findByIdAndUpdate(
-      organizationId,
-      { officers: processedOfficers },
-      { new: true }
-    ).select('officers image'); // Select officers and image fields
-
-    if (!updatedOrganization) {
-      return res.status(404).json({ message: 'Organization not found.' });
-    }
-
-    res.status(200).json({
-      officers: updatedOrganization.officers,
-      image: updatedOrganization.image
-    });
-  } catch (error) {
-    console.error('Error updating officers:', error);
-    res.status(500).json({ message: 'Error updating officers', error: error.message });
   }
 });
 
