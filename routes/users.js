@@ -415,7 +415,7 @@ router.post("/login", async (req, res) => {
 
   const secret = process.env.secret;
   if (!user) {
-    return res.status(400).send("The user not found");
+    return res.status(400).send("Invalid email or password!");
   }
 
   // console.log("verified?", user.isVerified)
@@ -435,7 +435,7 @@ router.post("/login", async (req, res) => {
     console.log(`Login successful for user: ${user.email}, Token: ${token}`);
     res.status(200).send({ user: user.email, token: token });
   } else {
-    res.status(400).send("Password is wrong!");
+    res.status(400).send("Invalid email or password!");
   }
 });
 
