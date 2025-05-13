@@ -313,87 +313,69 @@ router.get('/eligible-officers/:orgId', async (req, res) => {
   }
 });
 
-
 // Route to delete (remove) a single officer and sync with User model
-router.delete('/:id/officers/:userId', async (req, res) => {
+router.delete('/:orgId/officers/:userId', async (req, res) => {
+  const { orgId, userId } = req.params;
+
   try {
-    const organizationId = req.params.id;
-    const userId = req.params.userId;
-
-    // 1. Remove the officer from the organization.officers array
-    const updatedOrganization = await Organization.findByIdAndUpdate(
-      organizationId,
-      { $pull: { officers: { userId: userId } } },
+    const organization = await Organization.findByIdAndUpdate(
+      orgId,
+      {
+        $pull: {
+          officers: {
+            $or: [{ userId: userId }, { _id: userId }],
+          },
+        },
+      },
       { new: true }
-    ).select('officers image name department');
+    );
 
-    if (!updatedOrganization) {
-      return res.status(404).json({ message: 'Organization not found.' });
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
     }
 
-    // 2. Update the user's organizations array (flip from Officer → User)
-    const user = await User.findById(userId);
-    if (user) {
-      const membership = user.organizations.find(org => org.organization.toString() === organizationId);
-      if (membership) {
-        membership.role = 'User';
-        membership.isOfficer = false;
-        membership.department = updatedOrganization.department; // (optional: keep dept in sync)
-        await user.save();
-      }
-    }
-
-    res.status(200).json({
-      message: 'Officer removed successfully.',
-      officers: updatedOrganization.officers,
-      image: updatedOrganization.image
-    });
-
+    res.json({ message: 'Officer deleted successfully' });
   } catch (error) {
-    console.error('Error removing officer:', error);
-    res.status(500).json({ message: 'Error removing officer', error: error.message });
+    console.error(error);
+    res.status(500).json({ message: 'Error deleting officer' });
   }
 });
 
 // Route to update a single officer (PATCH /organizations/:orgId/officers/:userId)
-router.patch('/:orgId/officers/:userId', uploadOptions.single('image'), async (req, res) => {
-  // Extract orgId and userId from request parameters
-  const { orgId, userId } = req.params; // <-- Here we extract userId
+router.patch('/:orgId/officers/:userId', async (req, res) => {
+  const { orgId, userId } = req.params;
+  const { name, position } = req.body;
+  const image = req.file ? req.file.path : null;
 
-  // Find the organization
-  const organization = await Organization.findById(orgId);
-  if (!organization) {
-    return res.status(404).json({ message: 'Organization not found' });
+  try {
+    const organization = await Organization.findById(orgId);
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    // Find officer by userId OR _id
+    const officer = organization.officers.find(
+      (off) =>
+        (off.userId && off.userId.toString() === userId) ||
+        off._id.toString() === userId
+    );
+
+    if (!officer) {
+      return res.status(404).json({ message: 'Officer not found' });
+    }
+
+    // Update fields
+    if (name) officer.name = name;
+    if (position) officer.position = position;
+    if (image) officer.image = image;
+
+    await organization.save();
+
+    res.json({ message: 'Officer updated successfully', officer });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error updating officer' });
   }
-
-  // Find the officer in the officers array
-  const officerIndex = organization.officers.findIndex(off => off.userId.toString() === userId);
-  if (officerIndex === -1) {
-    return res.status(404).json({ message: 'Officer not found in this organization' });
-  }
-
-  // Update name/position if provided
-  const { name, position } = req.body; // Make sure you're getting name and position from the request body
-  if (name !== undefined) organization.officers[officerIndex].name = name;
-  if (position !== undefined) organization.officers[officerIndex].position = position;
-
-  // If new image uploaded → upload to Cloudinary
-  if (req.file) {
-    const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { resource_type: 'image' },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      streamifier.createReadStream(req.file.buffer).pipe(stream);
-    });
-    organization.officers[officerIndex].image = result.secure_url;
-  }
-
-  await organization.save();
-  res.status(200).json({ message: 'Officer updated successfully', officer: organization.officers[officerIndex] });
 });
 
 // Route to update and delete officers and sync with User model
@@ -461,7 +443,6 @@ router.get('/eligible-officers/:orgId', async (req, res) => {
   }
 });
 
-
 // Route to add a new officer to the organization (POST /organizations/:orgId/officers)
 router.post('/:orgId/officers', uploadOptions.single('image'), async (req, res) => {
   try {
@@ -515,8 +496,6 @@ router.post('/:orgId/officers', uploadOptions.single('image'), async (req, res) 
   }
 });
 
-
-
 // Get Organization by ID
 router.get('/:id', async (req, res) => {
   try {
@@ -569,15 +548,16 @@ router.put('/:id', uploadOptions.single('image'), async (req, res) => {
     }
 
     const { name, description, officers } = req.body;
-    let imageUrl = existingOrganization.image; // Retain the existing image by default
+    let imageUrl = existingOrganization.image; // Retain existing image by default
 
     // Determine department based on the new name (if name is updated)
     let department = existingOrganization.department;
     if (name) {
-      department = getDepartment(name);
-      if (!department) {
+      const newDepartment = getDepartment(name);
+      if (!newDepartment) {
         return res.status(400).json({ message: "Invalid organization name. Cannot determine department." });
       }
+      department = newDepartment;
     }
 
     // Check if a new image is uploaded
@@ -603,26 +583,28 @@ router.put('/:id', uploadOptions.single('image'), async (req, res) => {
     // Update fields only if they are provided in the request
     if (name) existingOrganization.name = name;
     if (description) existingOrganization.description = description;
-    if (officers !== undefined && officers !== "") {
+    if (imageUrl !== existingOrganization.image) existingOrganization.image = imageUrl;
+    if (department !== existingOrganization.department) existingOrganization.department = department;
+
+    // 🛠️ Only process officers IF explicitly provided AND non-empty string
+    if (officers && officers.trim() !== "") {
       try {
         const parsedOfficers = JSON.parse(officers);
-    
+
         if (!Array.isArray(parsedOfficers)) {
           return res.status(400).json({ message: "Invalid officers format. Expected a JSON array." });
         }
-    
+
         const allOfficersValid = parsedOfficers.every(officer => officer.userId);
         if (!allOfficersValid) {
           return res.status(400).json({ message: "Each officer must have a userId." });
         }
-    
+
         existingOrganization.officers = parsedOfficers;
       } catch (err) {
         return res.status(400).json({ message: "Invalid officers format. Expected JSON array." });
       }
     }
-    if (imageUrl !== existingOrganization.image) existingOrganization.image = imageUrl;
-    if (department !== existingOrganization.department) existingOrganization.department = department;
 
     // Save the updated organization
     const updatedOrganization = await existingOrganization.save();
@@ -633,6 +615,7 @@ router.put('/:id', uploadOptions.single('image'), async (req, res) => {
     res.status(500).json({ message: 'Error updating organization', error: error.message });
   }
 });
+
 
 // Delete Organization by ID
 router.delete('/:id', async (req, res) => {
