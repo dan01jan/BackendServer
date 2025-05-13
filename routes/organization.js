@@ -247,77 +247,78 @@ router.get('/all-officers', async (req, res) => {
 
 
 // Get eligible officers dynamically from User memberships
-router.get('/eligible-officers/:orgId', async (req, res) => {
-  try {
-    const { orgId } = req.params;
+// router.get('/eligible-officers/:orgId', async (req, res) => {
+//   try {
+//     const { orgId } = req.params;
 
-    const organization = await Organization.findById(orgId);
-    if (!organization) {
-      return res.status(404).json({ message: 'Organization not found' });
-    }
+//     const organization = await Organization.findById(orgId);
+//     if (!organization) {
+//       return res.status(404).json({ message: 'Organization not found' });
+//     }
 
-    // 1. Officers from the User collection
-    const users = await User.find({
-      organizations: {
-        $elemMatch: {
-          organization: orgId,
-          role: 'Officer',
-          isOfficer: true
-        }
-      }
-    }).select('name surname email _id');
+//     // 1. Officers from the User collection
+//     const users = await User.find({
+//       organizations: {
+//         $elemMatch: {
+//           organization: orgId,
+//           role: 'Officer',
+//           isOfficer: true
+//         }
+//       }
+//     }).select('name surname email _id');
 
-    // 2. Officers from the Organization schema
-    const orgOfficers = organization.officers || [];
+//     // 2. Officers from the Organization schema
+//     const orgOfficers = organization.officers || [];
 
-    // 3. Create a map of userId to user object for fast lookup
-    const userMap = new Map(users.map(user => [user._id.toString(), user]));
+//     // 3. Create a map of userId to user object for fast lookup
+//     const userMap = new Map(users.map(user => [user._id.toString(), user]));
 
-    // 4. Merge both lists, ensuring no duplicates
-    const merged = [];
+//     // 4. Merge both lists, ensuring no duplicates
+//     const merged = [];
 
-    // Add all officers from the Organization schema
-    for (const officer of orgOfficers) {
-      const user = userMap.get(officer.userId?.toString());
-      merged.push({
-        _id: officer.userId || null,
-        name: user?.name || officer.name || '',
-        surname: user?.surname || officer.surname || '',
-        email: user?.email || officer.email || '',
-        position: officer.position || '',
-        image: officer.image || '',
-      });
-    }
+//     // Add all officers from the Organization schema
+//     for (const officer of orgOfficers) {
+//       const user = userMap.get(officer.userId?.toString());
+//       merged.push({
+//         _id: officer.userId || null,
+//         name: user?.name || officer.name || '',
+//         surname: user?.surname || officer.surname || '',
+//         email: user?.email || officer.email || '',
+//         position: officer.position || '',
+//         image: officer.image || '',
+//       });
+//     }
 
-    // Add remaining officer users who were not in the orgOfficers list
-    for (const user of users) {
-      const alreadyIncluded = orgOfficers.some(
-        (officer) => officer.userId?.toString() === user._id.toString()
-      );
-      if (!alreadyIncluded) {
-        merged.push({
-          _id: user._id,
-          name: user.name,
-          surname: user.surname,
-          email: user.email,
-          position: '',
-          image: '',
-        });
-      }
-    }
+//     // Add remaining officer users who were not in the orgOfficers list
+//     for (const user of users) {
+//       const alreadyIncluded = orgOfficers.some(
+//         (officer) => officer.userId?.toString() === user._id.toString()
+//       );
+//       if (!alreadyIncluded) {
+//         merged.push({
+//           _id: user._id,
+//           name: user.name,
+//           surname: user.surname,
+//           email: user.email,
+//           position: '',
+//           image: '',
+//         });
+//       }
+//     }
 
-    res.status(200).json(merged);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Failed to fetch eligible officers', error: err.message });
-  }
-});
+//     res.status(200).json(merged);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: 'Failed to fetch eligible officers', error: err.message });
+//   }
+// });
 
 // Route to delete (remove) a single officer and sync with User model
 router.delete('/:orgId/officers/:userId', async (req, res) => {
   const { orgId, userId } = req.params;
 
   try {
+    // Find the organization and remove the officer from the officers array
     const organization = await Organization.findByIdAndUpdate(
       orgId,
       {
@@ -334,18 +335,36 @@ router.delete('/:orgId/officers/:userId', async (req, res) => {
       return res.status(404).json({ message: 'Organization not found' });
     }
 
-    res.json({ message: 'Officer deleted successfully' });
+    // Update the User model: Find the user and update their organization membership
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Find the specific organization in the user's organizations array
+    const orgIndex = user.organizations.findIndex(org => org.organization.toString() === orgId);
+
+    if (orgIndex === -1) {
+      return res.status(404).json({ message: 'User is not a member of this organization' });
+    }
+
+    // Update the role and isOfficer flag in the user's organization membership
+    user.organizations[orgIndex].role = 'User'; // Change role to 'User'
+    user.organizations[orgIndex].isOfficer = false; // Set isOfficer to false
+
+    await user.save(); // Save the updated user
+
+    res.json({ message: 'Officer deleted successfully and role updated' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error deleting officer' });
   }
 });
 
-// Route to update a single officer (PATCH /organizations/:orgId/officers/:userId)
 router.patch('/:orgId/officers/:userId', async (req, res) => {
   const { orgId, userId } = req.params;
-  const { name, position } = req.body;
-  const image = req.file ? req.file.path : null;
+  const { position } = req.body;
 
   try {
     const organization = await Organization.findById(orgId);
@@ -353,7 +372,6 @@ router.patch('/:orgId/officers/:userId', async (req, res) => {
       return res.status(404).json({ message: 'Organization not found' });
     }
 
-    // Find officer by userId OR _id
     const officer = organization.officers.find(
       (off) =>
         (off.userId && off.userId.toString() === userId) ||
@@ -364,10 +382,10 @@ router.patch('/:orgId/officers/:userId', async (req, res) => {
       return res.status(404).json({ message: 'Officer not found' });
     }
 
-    // Update fields
-    if (name) officer.name = name;
-    if (position) officer.position = position;
-    if (image) officer.image = image;
+    if (position) {
+      officer.position = position;
+      organization.markModified('officers'); // ✅ Critical line
+    }
 
     await organization.save();
 

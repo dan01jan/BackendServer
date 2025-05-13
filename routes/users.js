@@ -662,22 +662,70 @@ router.put("/organizations/officers/:userId/decline", async (req, res) => {
 router.put("/organizations/officers/:userId/approve", async (req, res) => {
   try {
     const { userId } = req.params;
+    const { organizationId } = req.body;
+
+    if (!organizationId) {
+      return res.status(400).json({ error: "Organization ID is required." });
+    }
+
+    // ✅ FIRST: Get organization details (for ._id and .department)
+    const organization = await Organization.findById(organizationId);
+    if (!organization) {
+      return res.status(404).json({ error: "Organization not found." });
+    }
+
+    // ✅ NEXT: Get the user
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ error: "Officer not found." });
     }
-    // Find the officer membership (assuming one officer membership per user)
-    const membership = user.organizations.find(m =>
-      m.role.toLowerCase() === 'officer'
+
+    // ✅ Find existing membership
+    let membership = user.organizations.find(m =>
+      m.organization.toString() === organization._id.toString() &&
+      m.role === "Officer"
     );
+
     if (!membership) {
-      return res.status(404).json({ error: "Officer membership not found." });
+      // ✅ If not found, push a new properly formatted membership
+      membership = {
+        organization: organization._id,
+        department: organization.department,
+        role: "Officer",
+        position: '',
+        isOfficer: true,
+      };
+      user.organizations.push(membership);
+    } else {
+      // ✅ If found, just update isOfficer
+      membership.isOfficer = true;
     }
-    membership.isOfficer = true; // Approve the officer status
+
     await user.save();
+
+    // ✅ Officer info for organization list
+    const officerDetails = {
+      userId: user._id,
+      name: user.name,
+      image: user.image || '',
+    };
+
+    if (membership.position) {
+      officerDetails.position = membership.position;
+    }
+
+    const officerExists = organization.officers.some(officer =>
+      officer.userId.toString() === user._id.toString()
+    );
+
+    if (!officerExists) {
+      organization.officers.push(officerDetails);
+      await organization.save();
+    }
+
     res.json({
-      message: "Officer approved successfully.",
-      officer: user,
+      message: "Officer approved and added to organization successfully.",
+      officer: officerDetails,
     });
   } catch (error) {
     console.error(error);
