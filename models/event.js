@@ -36,7 +36,11 @@ const eventSchema = mongoose.Schema({
     },
     organization: {
         type: String,
-        required: true
+        required: true,
+    },
+    secondOrganization: {
+    type: String,
+    required: false,
     },
     department: {
         type: String,

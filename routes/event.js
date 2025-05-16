@@ -149,54 +149,49 @@ router.post(`/`, uploadOptions.array('images', 10), async (req, res) => {
 router.post(`/create`, uploadOptions.array('images', 10), async (req, res) => {
   console.log('Register Request Body:', req.body);
 
-  // Ensure the type is a valid string and find the corresponding ObjectId in the Type collection
   const eventType = Array.isArray(req.body.type) ? req.body.type[0] : req.body.type;
 
   try {
-      // Find the corresponding Type document using the eventType (like "Academic events")
       const typeDoc = await Type.findOne({ eventType: eventType });
       if (!typeDoc) {
           return res.status(400).send('Invalid event type');
       }
 
-      const typeObjectId = typeDoc._id;  // This will be the ObjectId of the selected type
+      const typeObjectId = typeDoc._id;
 
-      // Check if files are included in the request
       const files = req.files;
       if (!files || files.length === 0) {
           return res.status(400).send('No images uploaded in the request');
       }
 
-      // Upload images to Cloudinary and get the URLs
       const uploadPromises = files.map(file => {
           return new Promise((resolve, reject) => {
               cloudinary.uploader.upload_stream(
                   { resource_type: 'image' },
                   (error, result) => {
                       if (error) {
-                          reject(error);  // Reject if there's an error
+                          reject(error);
                       } else {
-                          resolve(result.secure_url);  // Resolve with the image URL
+                          resolve(result.secure_url);
                       }
                   }
-              ).end(file.buffer);  // Ensure to call .end() to initiate the upload
+              ).end(file.buffer);
           });
       });
 
-      // Wait for all images to upload and get their URLs
       const imageUrls = await Promise.all(uploadPromises);
 
-      // Create and save the event
       const event = new Event({
           name: req.body.name,
           description: req.body.description,
-          type: typeObjectId,  // Use the correct ObjectId for the type
+          type: typeObjectId,
           organization: req.body.organization,
+          secondOrganization: req.body.secondOrganization || null, // Add this line
           department: req.body.department,
           dateStart: req.body.dateStart,
           dateEnd: req.body.dateEnd,
           location: req.body.location,
-          images: imageUrls,  // Store the image URLs
+          images: imageUrls,
           userId: req.body.userId,
       });
 
@@ -212,6 +207,7 @@ router.post(`/create`, uploadOptions.array('images', 10), async (req, res) => {
       res.status(500).send('Error processing the event: ' + error.message);
   }
 });
+
 
 // Update Web Event
 router.put('/:id', uploadOptions.array('images', 10), async (req, res) => {
