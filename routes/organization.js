@@ -224,16 +224,33 @@ router.post("/bulk", uploadOptions.any(), async (req, res) => {
 });
 
 // Get All Organizations
+// GET all non-archived organizations
 router.get('/', async (req, res) => {
   try {
-    // Sort organizations by name in ascending order (alphabetical order)
-    const organizations = await Organization.find().sort({ name: 1 });
+    const organizations = await Organization.find({
+      $or: [
+        { isArchived: false },
+        { isArchived: { $exists: false } }
+      ]
+    });
     res.status(200).json(organizations);
-  } catch (error) {
-    console.error('Error fetching organizations:', error);
-    res.status(500).json({ message: 'Error fetching organizations', error: error.message });
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching organizations', error: err.message });
   }
 });
+
+
+// GET archived organizations
+router.get('/archived', async (req, res) => {
+  try {
+    const archivedOrgs = await Organization.find({ isArchived: true });
+    res.status(200).json(archivedOrgs);
+  } catch (error) {
+    console.error('Error fetching archived organizations:', error);
+    res.status(500).json({ message: 'Error fetching archived organizations', error: error.message });
+  }
+});
+
 
 router.get('/all-officers', async (req, res) => {
   try {
@@ -636,40 +653,89 @@ router.put('/:id', uploadOptions.single('image'), async (req, res) => {
 
 
 // Delete Organization by ID
-router.delete('/:id', async (req, res) => {
+// router.delete('/:id', async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     // Validate MongoDB ObjectId
+//     if (!mongoose.Types.ObjectId.isValid(id)) {
+//       return res.status(400).json({ message: 'Invalid Organization ID' });
+//     }
+
+//     // Find the organization
+//     const organization = await Organization.findById(id);
+//     if (!organization) {
+//       return res.status(404).json({ message: 'Organization not found' });
+//     }
+
+//     // Delete the image from Cloudinary (if exists)
+//     if (organization.image) {
+//       try {
+//         const publicId = organization.image.split('/').pop().split('.')[0]; // Extract public ID
+//         await cloudinary.uploader.destroy(publicId);
+//       } catch (error) {
+//         console.error('Error deleting image from Cloudinary:', error);
+//       }
+//     }
+
+//     // Delete the organization from the database
+//     await Organization.findByIdAndDelete(id);
+
+//     res.status(200).json({ message: 'Organization deleted successfully' });
+//   } catch (error) {
+//     console.error('Error deleting organization:', error);
+//     res.status(500).json({ message: 'Error deleting organization', error: error.message });
+//   }
+// });
+
+//Archive
+router.patch('/archive/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'Invalid Organization ID' });
     }
 
-    // Find the organization
     const organization = await Organization.findById(id);
     if (!organization) {
       return res.status(404).json({ message: 'Organization not found' });
     }
 
-    // Delete the image from Cloudinary (if exists)
-    if (organization.image) {
-      try {
-        const publicId = organization.image.split('/').pop().split('.')[0]; // Extract public ID
-        await cloudinary.uploader.destroy(publicId);
-      } catch (error) {
-        console.error('Error deleting image from Cloudinary:', error);
-      }
-    }
+    organization.isArchived = true;
+    await organization.save();
 
-    // Delete the organization from the database
-    await Organization.findByIdAndDelete(id);
-
-    res.status(200).json({ message: 'Organization deleted successfully' });
+    res.status(200).json({ message: 'Organization archived successfully' });
   } catch (error) {
-    console.error('Error deleting organization:', error);
-    res.status(500).json({ message: 'Error deleting organization', error: error.message });
+    console.error('Error archiving organization:', error);
+    res.status(500).json({ message: 'Error archiving organization', error: error.message });
   }
 });
+
+//Unarchive
+router.patch('/unarchive/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid Organization ID' });
+    }
+
+    const organization = await Organization.findById(id);
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    organization.isArchived = false;
+    await organization.save();
+
+    res.status(200).json({ message: 'Organization unarchived successfully' });
+  } catch (error) {
+    console.error('Error unarchiving organization:', error);
+    res.status(500).json({ message: 'Error unarchiving organization', error: error.message });
+  }
+});
+
 
 // Get the total number of Organizations
 router.get('/get/count', async (req, res) => {

@@ -1074,6 +1074,40 @@ router.get('/events/:organization', async (req, res) => {
   }
 });
 
+router.post('/check-conflict', async (req, res) => {
+  try {
+    const { dateStart, dateEnd } = req.body;
 
+    if (!dateStart || !dateEnd) {
+      return res.status(400).json({ message: 'Start and end dates are required.' });
+    }
+
+    const start = new Date(dateStart);
+    const end = new Date(dateEnd);
+
+    // Check for any overlapping events
+    const conflict = await Event.findOne({
+      $or: [
+        {
+          dateStart: { $lte: end },
+          dateEnd: { $gte: start }
+        }
+      ]
+    });
+
+    if (conflict) {
+      return res.status(200).json({
+        conflict: true,
+        message: 'There is a scheduling conflict with another event.',
+        conflictingEvent: conflict
+      });
+    }
+
+    return res.status(200).json({ conflict: false });
+  } catch (err) {
+    console.error('Error checking conflict:', err);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+});
 
 module.exports=router;

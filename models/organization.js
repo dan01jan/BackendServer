@@ -42,6 +42,10 @@ const organizationSchema = new mongoose.Schema({
             required: false
         }
     }],
+        isArchived: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 // Pre-save hook to automatically determine organization category
