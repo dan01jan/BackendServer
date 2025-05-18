@@ -190,7 +190,8 @@ router.post(`/create`, uploadOptions.array('images', 10), async (req, res) => {
           department: req.body.department,
           dateStart: req.body.dateStart,
           dateEnd: req.body.dateEnd,
-          location: req.body.location,
+          location: '682997902dab163c7c6d3e6a',
+          capacity: 50,
           images: imageUrls,
           userId: req.body.userId,
       });

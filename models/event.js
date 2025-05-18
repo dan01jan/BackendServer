@@ -55,7 +55,12 @@ const eventSchema = mongoose.Schema({
         required: true
     },
     location: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Location',
+        required: true
+    },
+    capacity: {
+        type: Number,
         required: true
     },
     images: [{
