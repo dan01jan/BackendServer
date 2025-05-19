@@ -103,43 +103,56 @@ router.get('/user/:userId/events', async (req, res) => {
 
 // Get Event's User Attendance
 router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
-    try {
-        const eventId = req.params.selectedEvent;
-        console.log("Event ID:", eventId);
+  try {
+    const eventId = req.params.selectedEvent;
+    console.log("Event ID:", eventId);
 
-        const attendanceRecords = await Attendance.find({ eventId });
-
-        if (!attendanceRecords.length) {
-            return res.json([]);
-        }
-
-        const userIds = attendanceRecords.map(record => record.userId);
-
-        const users = await User.find({ '_id': { $in: userIds } });
-
-        const usersWithAttendance = users.map(user => {
-            // Find the first department that is not "None"
-            const validDepartment = user.organizations?.find(org => org.department !== "None")?.department || "N/A";
-        
-            return {
-                userId: user._id,
-                firstName: user.name,
-                lastName: user.surname,
-                department: validDepartment, // Get the first valid department
-                section: user.section,
-                hasAttended: attendanceRecords.some(record => record.userId.toString() === user._id.toString() && record.hasAttended),
-                hasRegistered: attendanceRecords.some(record => record.userId.toString() === user._id.toString() && record.hasRegistered),
-                dateRegistered: attendanceRecords.find(record => record.userId.toString() === user._id.toString())?.dateRegistered || null,
-            };
-        });
-        
-        res.json(usersWithAttendance);
-        console.log("ano ka", usersWithAttendance)
-    } catch (error) {
-        console.error('Error fetching users:', error.message);
-        res.status(500).json({ message: 'Server error' });
+    // Fetch event to check if it has ended
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
     }
+
+    const now = new Date();
+    const eventHasEnded = new Date(event.dateEnd) < now;
+
+    const attendanceRecords = await Attendance.find({ eventId });
+    if (!attendanceRecords.length) {
+      return res.json([]);
+    }
+
+    const userIds = attendanceRecords.map(record => record.userId);
+    const users = await User.find({ '_id': { $in: userIds } });
+
+    const usersWithAttendance = users.map(user => {
+      const validDepartment = user.organizations?.find(org => org.department !== "None")?.department || "N/A";
+      const record = attendanceRecords.find(r => r.userId.toString() === user._id.toString());
+
+      const hasAttended = record?.hasAttended;
+      const hasRegistered = record?.hasRegistered;
+      const dateRegistered = record?.dateRegistered || null;
+
+      return {
+        userId: user._id,
+        firstName: user.name,
+        lastName: user.surname,
+        department: validDepartment,
+        section: user.section,
+        hasAttended: hasAttended === true ? true : (eventHasEnded ? false : null),
+        hasRegistered,
+        dateRegistered,
+      };
+    });
+
+    res.json(usersWithAttendance);
+    console.log("Users with attendance:", usersWithAttendance);
+
+  } catch (error) {
+    console.error('Error fetching users:', error.message);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
+
 
 // Update User's Attendance Status
 router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
