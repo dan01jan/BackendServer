@@ -142,39 +142,60 @@ router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
 
 // Update User's Attendance Status
 router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
-   
-    console.log("Received PUT request at /updateUsersAttendance");
-    
-    try {
-        const { selectedEvent } = req.params;
-        console.log("Received selected event: ", selectedEvent)
-        const users = req.body.attendees;
-        console.log("Received users: ", users);
+  try {
+    const { selectedEvent } = req.params;
+    const users = req.body.attendees;
 
-        if (!users || !users.length) {
-            return res.status(400).json({ message: 'No users data provided' });
-        }
-
-        for (const user of users) {
-            const { userId, hasRegistered } = user;
-
-            const attendance = await Attendance.findOneAndUpdate(
-                { userId, eventId: selectedEvent }, 
-                { $set: { hasRegistered } },
-                { new: true }
-            );
-
-            if (!attendance) {
-                return res.status(404).json({ message: `Attendance record not found for user ${userId} and event ${selectedEvent}` });
-            }
-        }
-
-        res.status(200).json({ message: 'Attendance updated successfully' });
-    } catch (error) {
-        console.error('Error updating attendance:', error);
-        res.status(500).json({ message: 'Server error' });
+    if (!users || !users.length) {
+      return res.status(400).json({ message: 'No users data provided' });
     }
+
+    // Fetch the event
+    const event = await Event.findById(selectedEvent);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    // Count how many new registrations are being approved
+    let approvedCount = 0;
+
+    for (const user of users) {
+      const { userId, hasRegistered } = user;
+
+      const attendance = await Attendance.findOneAndUpdate(
+        { userId, eventId: selectedEvent },
+        { $set: { hasRegistered } },
+        { new: true }
+      );
+
+      if (!attendance) {
+        return res.status(404).json({
+          message: `Attendance record not found for user ${userId} and event ${selectedEvent}`,
+        });
+      }
+
+      // Only count if it's a new registration
+      if (hasRegistered && !attendance.hasRegistered) {
+        approvedCount++;
+      }
+    }
+
+    // Check if there's enough capacity
+    if (event.remainingCapacity < approvedCount) {
+      return res.status(400).json({ message: 'Not enough capacity for all selected users' });
+    }
+
+    // Deduct the capacity
+    event.remainingCapacity -= approvedCount;
+    await event.save();
+
+    res.status(200).json({ message: 'Attendance updated and capacity adjusted successfully' });
+  } catch (error) {
+    console.error('Error updating attendance:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
+
 
 // Count Selected Event's Attendance Count
 router.get('/hasAttendedCounts/:selectedEvent', async (req, res) => {

@@ -55,11 +55,15 @@ const eventSchema = mongoose.Schema({
         required: true
     },
     location: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'Location',
         required: true
     },
     capacity: {
+        type: Number,
+        required: true
+    },
+    remainingCapacity: {
         type: Number,
         required: true
     },

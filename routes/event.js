@@ -2,6 +2,7 @@ const express = require('express');
 const { Event } = require('../models/event');
 const { User } = require('../models/user');
 const { Type } = require('../models/type');
+const { Location} = require('../models/location');
 const { Organization } = require('../models/type');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -70,12 +71,49 @@ router.get(`/`, async (req, res) => {
 
 router.get('/events', async (req, res) => {
   try {
-      const events = await Event.find().populate('type').populate('userId', 'name');
-      res.json(events);
+    const events = await Event.find().lean();
+
+    // Extract valid ObjectId locations and types
+    const locationIds = events
+      .filter(e => mongoose.Types.ObjectId.isValid(e.location))
+      .map(e => e.location);
+
+    const typeIds = events
+      .filter(e => mongoose.Types.ObjectId.isValid(e.type))
+      .map(e => e.type);
+
+    // Fetch location docs
+    const locations = await Location.find({ _id: { $in: locationIds } }).lean();
+    const locationMap = {};
+    locations.forEach(loc => {
+      locationMap[loc._id.toString()] = loc.name;
+    });
+
+    // Fetch type docs
+    const types = await Type.find({ _id: { $in: typeIds } }).lean();
+    const typeMap = {};
+    types.forEach(type => {
+      typeMap[type._id.toString()] = type.eventType || type.name || "Unknown Type";
+    });
+
+    // Replace ObjectId fields with names
+    const finalEvents = events.map(event => {
+      if (mongoose.Types.ObjectId.isValid(event.location)) {
+        event.location = locationMap[event.location.toString()] || "Unknown Location";
+      }
+      if (mongoose.Types.ObjectId.isValid(event.type)) {
+        event.type = { eventType: typeMap[event.type.toString()] || "Unknown Type" };
+      }
+      return event;
+    });
+
+    res.json(finalEvents);
   } catch (error) {
-      res.status(500).json({ message: 'Error fetching events', error });
+    console.error("Error in GET /events:", error);
+    res.status(500).json({ message: "Error fetching events", error: error.message });
   }
 });
+
 
 router.get('/getEventTypeById/:type', async (req, res) => {
   const { type } = req.params; // The _id of the eventType to search for
@@ -182,19 +220,21 @@ router.post(`/create`, uploadOptions.array('images', 10), async (req, res) => {
       const imageUrls = await Promise.all(uploadPromises);
 
       const event = new Event({
-          name: req.body.name,
-          description: req.body.description,
-          type: typeObjectId,
-          organization: req.body.organization,
-          secondOrganization: req.body.secondOrganization || null, // Add this line
-          department: req.body.department,
-          dateStart: req.body.dateStart,
-          dateEnd: req.body.dateEnd,
-          location: '682997902dab163c7c6d3e6a',
-          capacity: 50,
-          images: imageUrls,
-          userId: req.body.userId,
-      });
+        name: req.body.name,
+        description: req.body.description,
+        type: typeObjectId,
+        organization: req.body.organization,
+        secondOrganization: req.body.secondOrganization || null,
+        department: req.body.department,
+        dateStart: req.body.dateStart,
+        dateEnd: req.body.dateEnd,
+        location: req.body.location,
+        capacity: parseInt(req.body.capacity), // Ensure this is a number
+        remainingCapacity: parseInt(req.body.capacity), // Match capacity initially
+        images: imageUrls,
+        userId: req.body.userId,
+    });
+
 
       const savedEvent = await event.save();
       if (!savedEvent) {
@@ -270,6 +310,7 @@ if (!eventType) {
               dateStart: req.body.dateStart,
               dateEnd: req.body.dateEnd,
               location: req.body.location,
+              capacity: req.body.capacity,
               images: images,  // Save both existing and new Cloudinary URLs
               userId: req.body.userId,
           },
