@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { User } = require('../models/user');
+const { Event } = require('../models/event');
 const { Attendance } = require('../models/attendance')
 const mongoose = require('mongoose');
 
@@ -156,33 +157,41 @@ router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    // Count how many new registrations are being approved
     let approvedCount = 0;
+    const attendanceUpdates = [];
 
+    // First pass: count how many NEW approvals
     for (const user of users) {
       const { userId, hasRegistered } = user;
 
-      const attendance = await Attendance.findOneAndUpdate(
-        { userId, eventId: selectedEvent },
-        { $set: { hasRegistered } },
-        { new: true }
-      );
-
-      if (!attendance) {
+      const attendanceBefore = await Attendance.findOne({ userId, eventId: selectedEvent });
+      if (!attendanceBefore) {
         return res.status(404).json({
           message: `Attendance record not found for user ${userId} and event ${selectedEvent}`,
         });
       }
 
-      // Only count if it's a new registration
-      if (hasRegistered && !attendance.hasRegistered) {
+      // Count only if we're changing from not registered -> registered
+      if (hasRegistered && !attendanceBefore.hasRegistered) {
         approvedCount++;
       }
+
+      // Save this to apply the update after capacity check
+      attendanceUpdates.push({ userId, hasRegistered });
     }
 
     // Check if there's enough capacity
     if (event.remainingCapacity < approvedCount) {
       return res.status(400).json({ message: 'Not enough capacity for all selected users' });
+    }
+
+    // Second pass: apply updates
+    for (const update of attendanceUpdates) {
+      await Attendance.findOneAndUpdate(
+        { userId: update.userId, eventId: selectedEvent },
+        { $set: { hasRegistered: update.hasRegistered } },
+        { new: true }
+      );
     }
 
     // Deduct the capacity
