@@ -333,20 +333,57 @@ if (!eventType) {
 router.get("/adminevents", async (req, res) => {
   try {
     const { organization } = req.query;
-    console.log('anong org:',organization)
+    console.log("anong org:", organization);
+
     if (!organization) {
       return res.status(400).json({ message: "Organization is required" });
     }
 
-    // Fetch events based on the organization and populate the 'type' field
-    const events = await Event.find({ organization: organization }) // Use 'organization' instead of 'organizationName'
-      .populate('type', 'eventType') // Populate the 'type' field, selecting only the 'eventType'
-      .lean(); // Use lean() for better performance if you don't need Mongoose document methods
+    // Step 1: Get all events for the organization
+    const events = await Event.find({ organization }).lean();
 
-    res.json(events);
-    console.log("events ni org:", events);
+    // Step 2: Extract valid ObjectId references
+    const locationIds = events
+      .filter(e => mongoose.Types.ObjectId.isValid(e.location))
+      .map(e => e.location);
+
+    const typeIds = events
+      .filter(e => mongoose.Types.ObjectId.isValid(e.type))
+      .map(e => e.type);
+
+    // Step 3: Fetch related documents
+    const locations = await Location.find({ _id: { $in: locationIds } }).lean();
+    const types = await Type.find({ _id: { $in: typeIds } }).lean();
+
+    // Step 4: Create maps for quick lookup
+    const locationMap = {};
+    locations.forEach(loc => {
+      locationMap[loc._id.toString()] = loc.name;
+    });
+
+    const typeMap = {};
+    types.forEach(type => {
+      typeMap[type._id.toString()] = type.eventType || type.name || "Unknown Type";
+    });
+
+    // Step 5: Replace ObjectIds with readable values
+    const finalEvents = events.map(event => {
+      if (mongoose.Types.ObjectId.isValid(event.location)) {
+        event.location = locationMap[event.location.toString()] || "Unknown Location";
+      }
+
+      if (mongoose.Types.ObjectId.isValid(event.type)) {
+        event.type = { eventType: typeMap[event.type.toString()] || "Unknown Type" };
+      }
+
+      return event;
+    });
+
+    console.log("events ni org:", finalEvents);
+    res.json(finalEvents);
+
   } catch (error) {
-    console.error(error);
+    console.error("Error in /adminevents:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
