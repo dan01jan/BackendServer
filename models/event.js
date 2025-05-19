@@ -79,6 +79,10 @@ const eventSchema = mongoose.Schema({
         type: Boolean, 
         default: false 
     },
+    isArchived: {
+    type: Boolean,
+    default: false,
+    },
     comments: [commentSchema]
 });
 

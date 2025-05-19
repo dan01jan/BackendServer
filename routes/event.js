@@ -436,17 +436,55 @@ router.get("/event-count", async (req, res) => {
 
 
 // Delete Event
-router.delete('/:id', (req, res)=>{
-    Event.findByIdAndRemove(req.params.id).then(event =>{
-        if(event) {
-            return res.status(200).json({success: true, message: 'the event is deleted!'})
-        } else {
-            return res.status(404).json({success: false , message: "event not found!"})
-        }
-    }).catch(err=>{
-       return res.status(500).json({success: false, error: err}) 
-    })
-})
+// router.delete('/:id', (req, res)=>{
+//     Event.findByIdAndRemove(req.params.id).then(event =>{
+//         if(event) {
+//             return res.status(200).json({success: true, message: 'the event is deleted!'})
+//         } else {
+//             return res.status(404).json({success: false , message: "event not found!"})
+//         }
+//     }).catch(err=>{
+//        return res.status(500).json({success: false, error: err}) 
+//     })
+// })
+
+// Archive Event
+router.put('/archive/:id', async (req, res) => {
+  try {
+    const event = await Event.findByIdAndUpdate(
+      req.params.id,
+      { isArchived: true },
+      { new: true }
+    );
+
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found!' });
+    }
+
+    return res.status(200).json({ success: true, message: 'The event is archived!', event });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Unarchive Event
+router.put('/unarchive/:id', async (req, res) => {
+  try {
+    const event = await Event.findByIdAndUpdate(
+      req.params.id,
+      { isArchived: false },
+      { new: true }
+    );
+
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Event not found!' });
+    }
+
+    return res.status(200).json({ success: true, message: 'The event is unarchived!', event });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 
 // Event create feedback (di ata to ginamit)
