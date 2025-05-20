@@ -310,7 +310,8 @@ if (!eventType) {
               dateStart: req.body.dateStart,
               dateEnd: req.body.dateEnd,
               location: req.body.location,
-              capacity: req.body.capacity,
+              capacity: parseInt(req.body.capacity), // Ensure this is a number
+              remainingCapacity: parseInt(req.body.capacity), // Match capacity initially
               images: images,  // Save both existing and new Cloudinary URLs
               userId: req.body.userId,
           },
