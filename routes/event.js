@@ -1188,40 +1188,42 @@ router.get('/events/:organization', async (req, res) => {
   }
 });
 
-router.post('/check-conflict', async (req, res) => {
+router.post("/check-conflict", async (req, res) => {
   try {
-    const { dateStart, dateEnd } = req.body;
+    const { dateStart, dateEnd, location } = req.body;
 
-    if (!dateStart || !dateEnd) {
-      return res.status(400).json({ message: 'Start and end dates are required.' });
+    console.log('req body', dateStart, dateEnd, location);
+    if (!dateStart || !dateEnd || !location) {
+      return res.status(400).json({
+        message: "Start date, end date, and location are required.",
+      });
     }
 
     const start = new Date(dateStart);
     const end = new Date(dateEnd);
 
-    // Check for overlapping events that are not archived
     const conflict = await Event.findOne({
-      isArchived: false, // ✅ Only check non-archived events
-      $or: [
-        {
-          dateStart: { $lte: end },
-          dateEnd: { $gte: start }
-        }
-      ]
-    }).populate('location'); // optional, for location name
+      isArchived: false,
+      location: location,
+      dateStart: { $lt: end },
+      dateEnd: { $gt: start },
+    });
+
+    console.log('conflict ngani', conflict)
 
     if (conflict) {
       return res.status(200).json({
         conflict: true,
-        message: 'There is a scheduling conflict with another event.',
-        conflictingEvent: conflict
+        message:
+          "There is a scheduling conflict with another event at the same location.",
+        conflictingEvent: conflict,
       });
     }
 
     return res.status(200).json({ conflict: false });
   } catch (err) {
-    console.error('Error checking conflict:', err);
-    return res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error checking conflict:", err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 });
 
