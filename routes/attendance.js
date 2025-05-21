@@ -1,108 +1,157 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { User } = require('../models/user');
-const { Event } = require('../models/event');
-const { Attendance } = require('../models/attendance')
-const mongoose = require('mongoose');
+const { User } = require("../models/user");
+const { Event } = require("../models/event");
+const { Attendance } = require("../models/attendance");
+const mongoose = require("mongoose");
 
 // Check if User Registered
-router.get('/check-registration', async (req, res) => {
-    try {
-        const { eventId, userId } = req.query;
 
-        if (!eventId || !userId) {
-            return res.status(400).json({ message: 'Event ID and User ID are required' });
-        }
-
-        const registration = await Attendance.findOne({ eventId, userId });
-
-        if (registration) {
-            return res.status(200).json({
-                isRegistered: true, 
-                hasAttended: registration.hasAttended,  
-                hasRegistered: registration.hasRegistered,
-            });
-        } else {
-            return res.status(200).json({
-                isRegistered: false, 
-                hasAttended: false,
-                hasRegistered: false,
-            });
-        }
-
-    } catch (error) {
-        console.error('Error checking registration:', error);
-        return res.status(500).json({ message: 'Server error' });
-    }
+router.get("/", async (req, res) => {
+  try {
+    const attendance = await Attendance.find();
+    res.status(200).json(attendance);
+  } catch (err) {
+    res
+      .status(500)
+      .json({ message: "Error retrieving attendance", error: err });
+  }
 });
 
-router.put('/attend', async (req, res) => {
-    try {
-        const { userId, eventId } = req.body;
-
-        // Find the attendance record
-        const attendance = await Attendance.findOne({ userId, eventId });
-
-        if (!attendance) {
-            return res.status(404).json({ message: 'Attendance record not found' });
-        }
-
-        // Update hasAttended to true
-        attendance.hasAttended = true;
-        await attendance.save();
-
-        res.status(200).json({ message: 'Attendance marked as attended', attendance });
-    } catch (error) {
-        res.status(500).json({ message: 'Error updating attendance', error });
+router.delete("/:id", async (req, res) => {
+  try {
+    const deletedAttendance = await Attendance.findByIdAndDelete(req.params.id);
+    if (!deletedAttendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
     }
+    res.status(200).json({ message: "Attendance deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error deleting attendance", error: err });
+  }
+});
+
+router.get("/check-registration", async (req, res) => {
+  try {
+    const { eventId, userId } = req.query;
+
+    if (!eventId || !userId) {
+      return res
+        .status(400)
+        .json({ message: "Event ID and User ID are required" });
+    }
+
+    const registration = await Attendance.findOne({ eventId, userId });
+
+    if (registration) {
+      return res.status(200).json({
+        isRegistered: true,
+        hasAttended: registration.hasAttended,
+        hasRegistered: registration.hasRegistered,
+      });
+    } else {
+      return res.status(200).json({
+        isRegistered: false,
+        hasAttended: false,
+        hasRegistered: false,
+      });
+    }
+  } catch (error) {
+    console.error("Error checking registration:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/count", async (req, res) => {
+  try {
+    const { eventId } = req.query;
+    console.log("Event ID:", eventId);
+
+    if (!eventId) {
+      return res.status(400).json({ message: "Event ID is required" });
+    }
+
+    const count = await Attendance.countDocuments({ eventId });
+
+    return res.status(200).json({ count });
+  } catch (error) {
+    console.error("Error fetching attendance count:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+router.put("/attend", async (req, res) => {
+  try {
+    const { userId, eventId } = req.body;
+
+    // Find the attendance record
+    const attendance = await Attendance.findOne({ userId, eventId });
+
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    // Update hasAttended to true
+    attendance.hasAttended = true;
+    await attendance.save();
+
+    res
+      .status(200)
+      .json({ message: "Attendance marked as attended", attendance });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating attendance", error });
+  }
 });
 
 // Register User on Event
-router.post('/', async (req, res) => {
-    try {
-        const { userId, eventId } = req.body;
+router.post("/", async (req, res) => {
+  try {
+    const { userId, eventId } = req.body;
 
-        const existingAttendance = await Attendance.findOne({ userId, eventId });
+    const existingAttendance = await Attendance.findOne({ userId, eventId });
 
-        if (existingAttendance) {
-            return res.status(400).json({ error: 'User has already registered for this event.' });
-        }
-
-        const newAttendance = new Attendance({
-            userId,
-            eventId
-        });
-
-        const savedAttendance = await newAttendance.save();
-        res.status(201).json(savedAttendance);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Server error' });
+    if (existingAttendance) {
+      return res
+        .status(400)
+        .json({ error: "User has already registered for this event." });
     }
+
+    const newAttendance = new Attendance({
+      userId,
+      eventId,
+    });
+
+    const savedAttendance = await newAttendance.save();
+    res.status(201).json(savedAttendance);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 // Get User's Registered Events
-router.get('/user/:userId/events', async (req, res) => {
-    try {
-        const { userId } = req.params;
-        
-        const attendanceRecords = await Attendance.find({ userId })
-            .populate('eventId');
-        
-        if (!attendanceRecords) {
-            return res.status(404).json({ success: false, message: 'No events found for this user' });
-        }
+router.get("/user/:userId/events", async (req, res) => {
+  try {
+    const { userId } = req.params;
 
-        const events = attendanceRecords.map(record => record.eventId);
+    const attendanceRecords = await Attendance.find({ userId }).populate(
+      "eventId"
+    );
 
-        res.status(200).json(events);
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+    if (!attendanceRecords) {
+      return res
+        .status(404)
+        .json({ success: false, message: "No events found for this user" });
     }
+
+    const events = attendanceRecords.map((record) => record.eventId);
+
+    res.status(200).json(events);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Get Event's User Attendance
-router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
+router.get("/getUsersByEvent/:selectedEvent", async (req, res) => {
   try {
     const eventId = req.params.selectedEvent;
     console.log("Event ID:", eventId);
@@ -110,7 +159,7 @@ router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
     // Fetch event to check if it has ended
     const event = await Event.findById(eventId);
     if (!event) {
-      return res.status(404).json({ message: 'Event not found' });
+      return res.status(404).json({ message: "Event not found" });
     }
 
     const now = new Date();
@@ -121,12 +170,16 @@ router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
       return res.json([]);
     }
 
-    const userIds = attendanceRecords.map(record => record.userId);
-    const users = await User.find({ '_id': { $in: userIds } });
+    const userIds = attendanceRecords.map((record) => record.userId);
+    const users = await User.find({ _id: { $in: userIds } });
 
-    const usersWithAttendance = users.map(user => {
-      const validDepartment = user.organizations?.find(org => org.department !== "None")?.department || "N/A";
-      const record = attendanceRecords.find(r => r.userId.toString() === user._id.toString());
+    const usersWithAttendance = users.map((user) => {
+      const validDepartment =
+        user.organizations?.find((org) => org.department !== "None")
+          ?.department || "N/A";
+      const record = attendanceRecords.find(
+        (r) => r.userId.toString() === user._id.toString()
+      );
 
       const hasAttended = record?.hasAttended;
       const hasRegistered = record?.hasRegistered;
@@ -138,7 +191,7 @@ router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
         lastName: user.surname,
         department: validDepartment,
         section: user.section,
-        hasAttended: hasAttended === true ? true : (eventHasEnded ? false : null),
+        hasAttended: hasAttended === true ? true : eventHasEnded ? false : null,
         hasRegistered,
         dateRegistered,
       };
@@ -146,28 +199,26 @@ router.get('/getUsersByEvent/:selectedEvent', async (req, res) => {
 
     res.json(usersWithAttendance);
     console.log("Users with attendance:", usersWithAttendance);
-
   } catch (error) {
-    console.error('Error fetching users:', error.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error fetching users:", error.message);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-
 // Update User's Attendance Status
-router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
+router.put("/updateUsersAttendance/:selectedEvent", async (req, res) => {
   try {
     const { selectedEvent } = req.params;
     const users = req.body.attendees;
 
     if (!users || !users.length) {
-      return res.status(400).json({ message: 'No users data provided' });
+      return res.status(400).json({ message: "No users data provided" });
     }
 
     // Fetch the event
     const event = await Event.findById(selectedEvent);
     if (!event) {
-      return res.status(404).json({ message: 'Event not found' });
+      return res.status(404).json({ message: "Event not found" });
     }
 
     let approvedCount = 0;
@@ -177,7 +228,10 @@ router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
     for (const user of users) {
       const { userId, hasRegistered } = user;
 
-      const attendanceBefore = await Attendance.findOne({ userId, eventId: selectedEvent });
+      const attendanceBefore = await Attendance.findOne({
+        userId,
+        eventId: selectedEvent,
+      });
       if (!attendanceBefore) {
         return res.status(404).json({
           message: `Attendance record not found for user ${userId} and event ${selectedEvent}`,
@@ -195,7 +249,9 @@ router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
 
     // Check if there's enough capacity
     if (event.remainingCapacity < approvedCount) {
-      return res.status(400).json({ message: 'Not enough capacity for all selected users' });
+      return res
+        .status(400)
+        .json({ message: "Not enough capacity for all selected users" });
     }
 
     // Second pass: apply updates
@@ -211,34 +267,43 @@ router.put('/updateUsersAttendance/:selectedEvent', async (req, res) => {
     event.remainingCapacity -= approvedCount;
     await event.save();
 
-    res.status(200).json({ message: 'Attendance updated and capacity adjusted successfully' });
+    res.status(200).json({
+      message: "Attendance updated and capacity adjusted successfully",
+    });
   } catch (error) {
-    console.error('Error updating attendance:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Error updating attendance:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-
 // Count Selected Event's Attendance Count
-router.get('/hasAttendedCounts/:selectedEvent', async (req, res) => {
-    const selectedEvent = req.params.selectedEvent;
+router.get("/hasAttendedCounts/:selectedEvent", async (req, res) => {
+  const selectedEvent = req.params.selectedEvent;
 
-    if (!mongoose.Types.ObjectId.isValid(selectedEvent)) {
-        return res.status(400).json({ message: 'Invalid eventId format' });
-    }
+  if (!mongoose.Types.ObjectId.isValid(selectedEvent)) {
+    return res.status(400).json({ message: "Invalid eventId format" });
+  }
 
-    const eventId = new mongoose.Types.ObjectId(selectedEvent);
+  const eventId = new mongoose.Types.ObjectId(selectedEvent);
 
-    try {
-        const attendedCount = await Attendance.countDocuments({ eventId, hasAttended: true });
-        const notAttendedCount = await Attendance.countDocuments({ eventId, hasAttended: false });
+  try {
+    const attendedCount = await Attendance.countDocuments({
+      eventId,
+      hasAttended: true,
+    });
+    const notAttendedCount = await Attendance.countDocuments({
+      eventId,
+      hasAttended: false,
+    });
 
-        res.status(200).json({ Present: attendedCount, Absent: notAttendedCount });
-    } catch (error) {
-        console.error('Error fetching attendance counts:', error);
-        res.status(500).json({ message: 'Error fetching attendance counts', error: error.message });
-    }
+    res.status(200).json({ Present: attendedCount, Absent: notAttendedCount });
+  } catch (error) {
+    console.error("Error fetching attendance counts:", error);
+    res.status(500).json({
+      message: "Error fetching attendance counts",
+      error: error.message,
+    });
+  }
 });
-
 
 module.exports = router;
