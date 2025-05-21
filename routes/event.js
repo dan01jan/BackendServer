@@ -1199,15 +1199,16 @@ router.post('/check-conflict', async (req, res) => {
     const start = new Date(dateStart);
     const end = new Date(dateEnd);
 
-    // Check for any overlapping events
+    // Check for overlapping events that are not archived
     const conflict = await Event.findOne({
+      isArchived: false, // ✅ Only check non-archived events
       $or: [
         {
           dateStart: { $lte: end },
           dateEnd: { $gte: start }
         }
       ]
-    });
+    }).populate('location'); // optional, for location name
 
     if (conflict) {
       return res.status(200).json({
@@ -1223,5 +1224,6 @@ router.post('/check-conflict', async (req, res) => {
     return res.status(500).json({ message: 'Internal server error.' });
   }
 });
+
 
 module.exports=router;
