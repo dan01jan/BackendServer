@@ -32,7 +32,7 @@ const postRoutes = require("./routes/post");
 const typeRoutes = require("./routes/type");
 const organizationRoutes = require("./routes/organization");
 const locationRoutes = require("./routes/location");
-
+const waitlistedRoutes = require("./routes/waitlisted");
 
 const api = process.env.API_URL;
 
@@ -48,6 +48,7 @@ app.use(`${api}/posts`, postRoutes);
 app.use(`${api}/types`, typeRoutes);
 app.use(`${api}/organizations`, organizationRoutes);
 app.use(`${api}/locations`, locationRoutes);
+app.use(`${api}/waitlisted`, waitlistedRoutes);
 
 // Catch-all for unmatched routes with detailed logging
 app.use('*', (req, res) => {

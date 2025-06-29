@@ -18,6 +18,95 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.put("/mark-registered/:id", async (req, res) => {
+  try {
+    const updatedAttendance = await Attendance.findByIdAndUpdate(
+      req.params.id,
+      { hasRegistered: true },
+      { new: true }
+    );
+
+    if (!updatedAttendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    res.status(200).json({
+      message: "Attendance marked as registered successfully",
+      data: updatedAttendance,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Error updating attendance",
+      error: err.message,
+    });
+  }
+});
+
+
+router.put("/mark-unregistered/:id", async (req, res) => {
+  try {
+    const updatedAttendance = await Attendance.findByIdAndUpdate(
+      req.params.id,
+      { hasRegistered: false },
+      { new: true }
+    );
+
+    if (!updatedAttendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    res.status(200).json({
+      message: "Attendance marked as unregistered successfully",
+      data: updatedAttendance,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Error updating attendance",
+      error: err.message,
+    });
+  }
+});
+
+router.get("/count", async (req, res) => {
+  try {
+    const { eventId } = req.query;
+    console.log("Event ID:", eventId);
+
+    if (!eventId) {
+      return res.status(400).json({ message: "Event ID is required" });
+    }
+
+    const count = await Attendance.countDocuments({ eventId });
+
+    return res.status(200).json({ count });
+  } catch (error) {
+    console.error("Error fetching attendance count:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/unattended", async (req, res) => {
+  try {
+    const { eventId } = req.query;
+    console.log("Event ID for remaining-unattended:", eventId);
+
+    if (!eventId) {
+      return res.status(400).json({ message: "Event ID is required" });
+    }
+
+    const count = await Attendance.countDocuments({
+      eventId,
+      hasRegistered: false,
+    });
+
+    return res.status(200).json({ remainingUnattended: count });
+  } catch (error) {
+    console.error("Error fetching remaining unattended count:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+
 router.delete("/:id", async (req, res) => {
   try {
     const deletedAttendance = await Attendance.findByIdAndDelete(req.params.id);
@@ -61,23 +150,6 @@ router.get("/check-registration", async (req, res) => {
   }
 });
 
-router.get("/count", async (req, res) => {
-  try {
-    const { eventId } = req.query;
-    console.log("Event ID:", eventId);
-
-    if (!eventId) {
-      return res.status(400).json({ message: "Event ID is required" });
-    }
-
-    const count = await Attendance.countDocuments({ eventId });
-
-    return res.status(200).json({ count });
-  } catch (error) {
-    console.error("Error fetching attendance count:", error);
-    return res.status(500).json({ message: "Server error" });
-  }
-});
 router.put("/attend", async (req, res) => {
   try {
     const { userId, eventId } = req.body;
