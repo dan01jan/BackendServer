@@ -103,21 +103,32 @@ router.get("/position/:eventId/:userId", async (req, res) => {
   try {
     const { eventId, userId } = req.params;
 
-    // 1) Verify event
+    // 1) Get the event
     const event = await Event.findById(eventId);
     if (!event) {
       return res.status(404).json({ message: "Event not found." });
     }
 
-    // 2) Count registered users (Attendance)
+    // 2) Get number of attendees who are registered but not yet attended
     const registeredCount = await Attendance.countDocuments({
       eventId,
       hasRegistered: true,
+      hasAttended: false,
     });
 
-    const remainingSlots = Math.max(0, event.maxAttendees - registeredCount);
+    const remainingSlots = Math.max(
+      0,
+      (event?.capacity || 0) - registeredCount
+    );
 
-    // 3) Fetch filtered waitlist
+    // 3) Check if user is on the waitlist
+    const userWaitlistEntry = await Waitlisted.findOne({
+      eventId,
+      userId,
+      registered: false,
+    });
+
+    // 4) Get full waitlist (even if user isn't part of it)
     const waitlist = await Waitlisted.find({
       eventId,
       registered: false,
@@ -125,42 +136,38 @@ router.get("/position/:eventId/:userId", async (req, res) => {
       .sort({ dateWaitlisted: 1 })
       .lean();
 
-    // 4) Handle empty waitlist
-    if (!waitlist || waitlist.length === 0) {
+    const totalWaitlist = waitlist.length;
+
+    // 5) If user is NOT in the waitlist
+    if (!userWaitlistEntry) {
       return res.status(200).json({
         position: null,
-        totalWaitlist: 0,
+        totalWaitlist,
         remainingSlots,
         isTurn: false,
         ahead: [],
         behind: [],
+        message: "You are not on the waitlist.",
       });
     }
 
-    // 5) Find user's index
+    // 6) Get user's position (now that we confirmed they're in waitlist)
     const idx = waitlist.findIndex((w) => w.userId.toString() === userId);
 
-    // If not found, return empty waitlist info (instead of 404)
-    if (idx === -1) {
-      return res.status(200).json({
-        position: null,
-        totalWaitlist: waitlist.length,
-        remainingSlots,
-        isTurn: false,
-        ahead: [],
-        behind: [],
-      });
-    }
+    const isTurn = idx === 0 && remainingSlots > 0;
 
-    // 6) Return user’s waitlist status
     return res.status(200).json({
       position: idx + 1,
-      totalWaitlist: waitlist.length,
+      totalWaitlist,
       remainingSlots,
-      isTurn: idx === 0 && remainingSlots > 0,
+      isTurn,
       ahead: waitlist.slice(0, idx),
       behind: waitlist.slice(idx + 1),
-      eliminated: true,
+      message: isTurn
+        ? "It’s your turn!"
+        : remainingSlots === 0
+        ? "All slots are currently filled. Please wait."
+        : "Waiting on your turn.",
     });
   } catch (err) {
     console.error("Error in /position route:", err);
