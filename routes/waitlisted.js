@@ -176,15 +176,16 @@ router.get("/position/:eventId/:userId", async (req, res) => {
 });
 
 // DELETE: expire a waitlist entry (either user declined or timeout)
-router.post("/expire", async (req, res) => {
+router.delete("/expire/:userId/:eventId", async (req, res) => {
   try {
-    const { userId, eventId } = req.body;
+    const { userId, eventId } = req.params;
+
     if (!userId || !eventId) {
       return res.status(400).json({ message: "userId and eventId required." });
     }
 
-    // Remove that user from the waitlist
     const deleted = await Waitlisted.findOneAndDelete({ userId, eventId });
+
     if (!deleted) {
       return res.status(404).json({ message: "Waitlist entry not found." });
     }
@@ -195,7 +196,6 @@ router.post("/expire", async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err });
   }
 });
-
 router.delete("/:eventId/:userId", async (req, res) => {
   try {
     const { eventId, userId } = req.params;
