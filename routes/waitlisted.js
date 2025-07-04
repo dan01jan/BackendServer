@@ -4,6 +4,7 @@ const { User } = require("../models/user");
 const { Event } = require("../models/event");
 const { Attendance } = require("../models/attendance");
 const { Waitlisted } = require("../models/waitlisted");
+const { Notification } = require("../models/notification");
 
 const mongoose = require("mongoose");
 
@@ -196,6 +197,7 @@ router.delete("/expire/:userId/:eventId", async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err });
   }
 });
+
 router.delete("/:eventId/:userId", async (req, res) => {
   try {
     const { eventId, userId } = req.params;
@@ -208,7 +210,6 @@ router.delete("/:eventId/:userId", async (req, res) => {
   }
 });
 
-// Confirm waitlist registration
 router.post("/confirm", async (req, res) => {
   try {
     const { userId, eventId } = req.body;
@@ -219,34 +220,89 @@ router.post("/confirm", async (req, res) => {
         .json({ error: "userId and eventId are required." });
     }
 
-    // ✅ Mark user as registered in Waitlisted
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ error: "Event not found." });
+
+    const now = new Date();
+    const oneHourAfterStart = new Date(event.dateStart);
+    oneHourAfterStart.setSeconds(oneHourAfterStart.getSeconds() + 30);
+
+    // ✅ Update waitlist
     const updated = await Waitlisted.findOneAndUpdate(
       { userId, eventId },
       { registered: true },
       { new: true }
     );
-
     if (!updated) {
       return res.status(404).json({ error: "User not found in waitlist." });
     }
 
-    // ✅ Add to Attendance if not yet present
-    const alreadyInAttendance = await Attendance.findOne({ userId, eventId });
-
-    if (!alreadyInAttendance) {
-      await Attendance.create({
+    let attendance = await Attendance.findOne({ userId, eventId });
+    if (!attendance) {
+      attendance = await Attendance.create({
         userId,
         eventId,
         hasRegistered: true,
         hasAttended: false,
       });
+      console.log("✅ Attendance created:", attendance);
+    } else if (!attendance.hasRegistered) {
+      attendance.hasRegistered = true;
+      await attendance.save();
+      console.log("✅ Attendance updated to hasRegistered = true:", attendance);
+    } else {
+      console.log("ℹ️ User already registered in attendance:", attendance);
+    }
+
+    let displacedUser = null;
+
+    const unconfirmed = await Attendance.find({
+      eventId,
+      hasRegistered: false,
+    }).sort({ dateRegistered: 1 });
+
+    console.log(
+      "🔎 Unconfirmed users:",
+      unconfirmed.map((u) => u.userId)
+    );
+
+    if (unconfirmed.length > 0) {
+      displacedUser = unconfirmed[0].userId;
+      console.log("⚠️ Displaced user candidate:", displacedUser);
+
+      const activeFromWaitlist = await Waitlisted.findOne({
+        eventId,
+        registered: true,
+        userId,
+      });
+
+      const attendanceOfWaitlisted = await Attendance.findOne({
+        userId,
+        eventId,
+        hasRegistered: true,
+      });
+
+      console.log("🔍 Confirming waitlisted registration:");
+      console.log(" - Waitlist record found:", !!activeFromWaitlist);
+      console.log(" - Attendance record found:", !!attendanceOfWaitlisted);
+
+      if (activeFromWaitlist && attendanceOfWaitlisted) {
+        await Notification.create({
+          userId: displacedUser,
+          message: `Your slot for "${event.name}" may have been taken by a waitlisted user because you didn't confirm attendance.`,
+        });
+      } else {
+      }
+    } else {
+      console.log("ℹ️ No unconfirmed users found.");
     }
 
     return res.status(200).json({
-      message: "User confirmed and added to attendance.",
+      message: "Waitlisted user confirmed successfully.",
+      displacedUser,
     });
   } catch (error) {
-    console.error("Error in /waitlisted/confirm:", error);
+    console.error("❌ Error in /waitlisted/confirm:", error);
     return res.status(500).json({ error: "Server error" });
   }
 });
