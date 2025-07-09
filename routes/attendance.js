@@ -3,6 +3,7 @@ const router = express.Router();
 const { User } = require("../models/user");
 const { Event } = require("../models/event");
 const { Attendance } = require("../models/attendance");
+const { Waitlisted } = require("../models/waitlisted");
 const mongoose = require("mongoose");
 
 // Check if User Registered
@@ -41,7 +42,6 @@ router.put("/mark-registered/:id", async (req, res) => {
     });
   }
 });
-
 
 router.put("/mark-unregistered/:id", async (req, res) => {
   try {
@@ -106,6 +106,109 @@ router.get("/unattended", async (req, res) => {
   }
 });
 
+// GET /slots/remaining?eventId=...
+router.get("/slots/remaining", async (req, res) => {
+  try {
+    const { eventId } = req.query;
+    console.log("🔍 [1] Received request for slots with eventId:", eventId);
+
+    if (!eventId) {
+      return res.status(400).json({ message: "Event ID is required" });
+    }
+
+    const event = await Event.findById(eventId);
+    if (!event || !event.capacity || !event.dateStart) {
+      return res.status(404).json({ message: "Event not found or incomplete" });
+    }
+
+    const now = new Date();
+    const thirtyMinutesAfterStart = new Date(
+      new Date(event.dateStart).getTime() + 30 * 60000
+    );
+    const sixtyMinutesAfterStart = new Date(
+      new Date(event.dateStart).getTime() + 60 * 60000
+    );
+
+    const totalRegistered = await Attendance.countDocuments({ eventId });
+
+    const attendedUsers = await Attendance.find({
+      eventId,
+      hasAttended: true,
+    }).populate("userId", "name email");
+
+    let absentUsers = [];
+    let remainingUnattended = 0;
+
+    // Step 1: Fetch original absent users after 30 minutes
+    if (now >= thirtyMinutesAfterStart) {
+      absentUsers = await Attendance.find({
+        eventId,
+        hasAttended: false,
+      }).populate("userId", "name email");
+
+      remainingUnattended = absentUsers.length;
+    }
+
+    // Step 2: Get waitlisted users
+    const waitlistedUsers = await Waitlisted.find({ eventId }).populate(
+      "userId",
+      "name email"
+    );
+
+    const waitlistedUnregistered = waitlistedUsers.filter((u) => !u.registered);
+    const waitlistedRegistered = waitlistedUsers.filter((u) => u.registered);
+
+    // Step 3: Check replacements after 60 minutes
+    let replacedCount = 0;
+
+    if (now >= sixtyMinutesAfterStart) {
+      const absenteeDocs = await Attendance.find({
+        eventId,
+        hasRegistered: false,
+      }).sort({ _id: 1 }); // Oldest first for replacement
+
+      for (const wlUser of waitlistedRegistered) {
+        const isAttending = await Attendance.findOne({
+          eventId,
+          userId: wlUser.userId,
+        });
+
+        if (isAttending && absenteeDocs[replacedCount]) {
+          // Replace one absentee with a waitlisted attendee
+          replacedCount++;
+        }
+      }
+
+      // Adjust remainingUnattended
+      remainingUnattended = Math.max(remainingUnattended - replacedCount, 0);
+    }
+
+    // Final slot calc
+    const remainingSlots =
+      event.capacity - totalRegistered + remainingUnattended;
+    const safeRemaining = remainingSlots > 0 ? remainingSlots : 0;
+
+    return res.status(200).json({
+      capacity: event.capacity,
+      totalRegistered,
+      totalAttended: attendedUsers.length,
+      totalAbsent: absentUsers.length - replacedCount,
+      remainingUnattended,
+      remainingSlots: safeRemaining,
+      replacedCount,
+
+      // Lists
+      attendedUsers,
+      absentUsers,
+      waitlistedUsers,
+      waitlistedUnregistered,
+      waitlistedRegistered,
+    });
+  } catch (error) {
+    console.error("❌ Error in /slots/remaining:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 router.delete("/:id", async (req, res) => {
   try {

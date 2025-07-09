@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
+
 
 const { Notification } = require("../models/notification");
 const { Event } = require("../models/event");
@@ -87,56 +89,69 @@ router.post("/waitlist/open/all", async (req, res) => {
 
       if (now >= endTime) continue;
 
-      const thirtyMinutesAfterStart = new Date(
-        startTime.getTime() + 30 * 60 * 1000 // 30 minutes
-      );
-
-      const sixtyMinutesAfterStart = new Date(
-        startTime.getTime() + 60 * 60 * 1000 // 1 hour
-      );
+      const thirtyMinutesAfterStart = new Date(startTime.getTime() + 30 * 60000);
+      const sixtyMinutesAfterStart = new Date(startTime.getTime() + 60 * 60000);
 
       if (now >= thirtyMinutesAfterStart && now < sixtyMinutesAfterStart) {
         const message = `Waitlist for "${event.name}" is now open! Join if you're interested.`;
 
         const existingNotif = await Notification.findOne({ message });
-        if (existingNotif) continue;
-
-        let usersToNotify = [];
-
-        if (event.department === "None") {
-          usersToNotify = await User.find({});
-        } else {
-          const orgName1 = event.organization?.trim().toLowerCase();
-          const orgName2 = event.secondOrganization?.trim().toLowerCase();
-
-          const orgId1 = orgMap[orgName1];
-          const orgId2 = orgMap[orgName2];
-
-          console.log(`📌 Event: "${event.name}"`);
-          console.log(`🔎 Matching org names:`, { orgName1, orgName2 });
-          console.log(`🆔 Matched org IDs:`, { orgId1, orgId2 });
-
-          if (!orgId1 && !orgId2) {
-            console.warn(
-              `⚠️ No matching organization found for event "${event.name}". Skipping.`
-            );
-            continue;
-          }
-
-          // Find users with a matching organization ID and department
-          usersToNotify = await User.find({
-            organizations: {
-              $elemMatch: {
-                organization: {
-                  $in: [orgId1, orgId2]
-                    .filter(Boolean)
-                    .map((id) => new mongoose.Types.ObjectId(id)),
-                },
-                department: event.department,
-              },
-            },
-          });
+        if (existingNotif) {
+          console.log(`⏭️ Notification already exists for "${event.name}"`);
+          continue;
         }
+
+        const orgName1 = event.organization?.trim().toLowerCase();
+        const orgName2 = event.secondOrganization?.trim().toLowerCase();
+
+        console.log(`📌 Processing event: "${event.name}"`);
+        console.log(`🔎 Event organizations:`, { orgName1, orgName2 });
+
+        // Special case: League of Student Organization
+        const isLeagueOrg =
+          orgName1 === "league of student organization" ||
+          orgName2 === "league of student organization";
+
+        if (isLeagueOrg) {
+          const allUsers = await User.find({});
+          const notifications = allUsers.map((user) => ({
+            userId: user._id,
+            message,
+          }));
+
+          await Notification.insertMany(notifications);
+          totalNotified += notifications.length;
+
+          console.log(
+            `🌍 Sent to ALL users for "${event.name}" (League of Student Organization)`
+          );
+          continue;
+        }
+
+        const orgId1 = orgMap[orgName1];
+        const orgId2 = orgName2 ? orgMap[orgName2] : null;
+
+        console.log(`🆔 Matched Org IDs:`, { orgId1, orgId2 });
+
+        if (!orgId1 && !orgId2) {
+          console.warn(
+            `⚠️ No matching organization found for event "${event.name}". Skipping.`
+          );
+          continue;
+        }
+
+        const orgIdsToMatch = [orgId1, orgId2]
+          .filter(Boolean)
+          .map((id) => new mongoose.Types.ObjectId(id));
+
+        const usersToNotify = await User.find({
+          organizations: {
+            $elemMatch: {
+              organization: { $in: orgIdsToMatch },
+              department: event.department,
+            },
+          },
+        });
 
         if (usersToNotify.length === 0) {
           console.log(`ℹ️ No users found for "${event.name}"`);
@@ -152,7 +167,7 @@ router.post("/waitlist/open/all", async (req, res) => {
         totalNotified += notifications.length;
 
         console.log(
-          `✅ Notified ${notifications.length} users for "${event.name}"`
+          `✅ Sent to ${notifications.length} users for "${event.name}"`
         );
       }
     }
@@ -166,6 +181,7 @@ router.post("/waitlist/open/all", async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 });
+
 
 // router.delete("/waitlist/cleanup-notifications", async (req, res) => {
 //   try {
