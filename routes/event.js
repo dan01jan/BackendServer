@@ -1311,14 +1311,6 @@ router.put("/reopen/:eventId", async (req, res) => {
       return res.status(404).json({ message: "Event not found." });
     }
 
-    const oneHourAfterStart =
-      new Date(event.dateStart).getTime() + 60 * 60 * 1000;
-    if (Date.now() < oneHourAfterStart) {
-      return res.status(403).json({
-        message: "You can only reopen the event 1 hour after its start time.",
-      });
-    }
-
     event.isReopened = isReopened;
     await event.save();
 

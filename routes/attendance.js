@@ -3,7 +3,8 @@ const router = express.Router();
 const { User } = require("../models/user");
 const { Event } = require("../models/event");
 const { Attendance } = require("../models/attendance");
-const { Waitlisted } = require("../models/waitlisted");
+const { Notification } = require("../models/notification");
+
 const mongoose = require("mongoose");
 
 // Check if User Registered
@@ -106,103 +107,87 @@ router.get("/unattended", async (req, res) => {
   }
 });
 
-// GET /slots/remaining?eventId=...
 router.get("/slots/remaining", async (req, res) => {
   try {
     const { eventId } = req.query;
-    console.log("🔍 [1] Received request for slots with eventId:", eventId);
+    console.log("🔍 Received request for slots with eventId:", eventId);
 
     if (!eventId) {
       return res.status(400).json({ message: "Event ID is required" });
     }
 
     const event = await Event.findById(eventId);
-    if (!event || !event.capacity || !event.dateStart) {
+    if (!event || !event.capacity || !event.dateStart || !event.dateEnd) {
       return res.status(404).json({ message: "Event not found or incomplete" });
     }
 
     const now = new Date();
-    const thirtyMinutesAfterStart = new Date(
-      new Date(event.dateStart).getTime() + 30 * 60000
-    );
-    const sixtyMinutesAfterStart = new Date(
-      new Date(event.dateStart).getTime() + 60 * 60000
-    );
 
-    const totalRegistered = await Attendance.countDocuments({ eventId });
-
-    const attendedUsers = await Attendance.find({
-      eventId,
-      hasAttended: true,
-    }).populate("userId", "name email");
-
-    let absentUsers = [];
-    let remainingUnattended = 0;
-
-    // Step 1: Fetch original absent users after 30 minutes
-    if (now >= thirtyMinutesAfterStart) {
-      absentUsers = await Attendance.find({
-        eventId,
-        hasAttended: false,
-      }).populate("userId", "name email");
-
-      remainingUnattended = absentUsers.length;
-    }
-
-    // Step 2: Get waitlisted users
-    const waitlistedUsers = await Waitlisted.find({ eventId }).populate(
+    // 🔍 Get all attendees
+    const allAttendances = await Attendance.find({ eventId }).populate(
       "userId",
       "name email"
     );
 
-    const waitlistedUnregistered = waitlistedUsers.filter((u) => !u.registered);
-    const waitlistedRegistered = waitlistedUsers.filter((u) => u.registered);
+    const totalRegistered = allAttendances.length;
 
-    // Step 3: Check replacements after 60 minutes
-    let replacedCount = 0;
+    // ✅ Attended
+    const attendedUsers = allAttendances.filter((a) => a.hasAttended);
+    const totalAttended = attendedUsers.length;
 
-    if (now >= sixtyMinutesAfterStart) {
-      const absenteeDocs = await Attendance.find({
-        eventId,
-        hasRegistered: false,
-      }).sort({ _id: 1 }); // Oldest first for replacement
+    // 🔁 Get displaced userIds
+    let displacedUserIds = [];
 
-      for (const wlUser of waitlistedRegistered) {
-        const isAttending = await Attendance.findOne({
-          eventId,
-          userId: wlUser.userId,
-        });
+    if (event.isReopened) {
+      const displacedNotifs = await Notification.find({
+        message: { $regex: "may have been taken", $options: "i" },
+        message: { $regex: event.name, $options: "i" },
+      });
 
-        if (isAttending && absenteeDocs[replacedCount]) {
-          // Replace one absentee with a waitlisted attendee
-          replacedCount++;
-        }
-      }
-
-      // Adjust remainingUnattended
-      remainingUnattended = Math.max(remainingUnattended - replacedCount, 0);
+      displacedUserIds = displacedNotifs.map((n) => String(n.userId));
     }
 
-    // Final slot calc
-    const remainingSlots =
-      event.capacity - totalRegistered + remainingUnattended;
-    const safeRemaining = remainingSlots > 0 ? remainingSlots : 0;
+    // 🟡 Pending = not attended, event not yet ended, and NOT displaced
+    const pendingUsers = allAttendances.filter(
+      (a) =>
+        !a.hasAttended &&
+        now < new Date(event.dateEnd) &&
+        !displacedUserIds.includes(String(a.userId))
+    );
+    const totalPending = pendingUsers.length;
+
+    // 🔴 Absent = not attended, event ended, and NOT displaced
+    const absentUsers = allAttendances.filter(
+      (a) =>
+        !a.hasAttended &&
+        now >= new Date(event.dateEnd) &&
+        !displacedUserIds.includes(String(a.userId))
+    );
+    const totalAbsent = absentUsers.length;
+
+    // 🔵 Displaced = part of attendance + has a notification
+    const displacedUsers = allAttendances.filter((a) =>
+      displacedUserIds.includes(String(a.userId))
+    );
+    const displacedUserCount = displacedUsers.length;
+
+    // 🧮 Adjusted remaining slots
+    const adjustedRemainingSlots =
+      event.capacity - totalRegistered + displacedUserCount;
+    const safeRemaining = Math.max(adjustedRemainingSlots, 0);
 
     return res.status(200).json({
       capacity: event.capacity,
       totalRegistered,
-      totalAttended: attendedUsers.length,
-      totalAbsent: absentUsers.length - replacedCount,
-      remainingUnattended,
+      totalAttended,
+      totalPending,
+      totalAbsent,
+      displacedUserCount,
       remainingSlots: safeRemaining,
-      replacedCount,
-
-      // Lists
       attendedUsers,
+      pendingUsers,
       absentUsers,
-      waitlistedUsers,
-      waitlistedUnregistered,
-      waitlistedRegistered,
+      displacedUsers, // optional: for debugging/inspection
     });
   } catch (error) {
     console.error("❌ Error in /slots/remaining:", error);
@@ -289,9 +274,36 @@ router.post("/", async (req, res) => {
         .json({ error: "User has already registered for this event." });
     }
 
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(404).json({ error: "Event not found." });
+    }
+
+    // 3. If event is reopened, find the earliest unverified attendee
+    if (event.isReopened) {
+      const displacedUser = await Attendance.findOne({
+        eventId,
+        hasRegistered: false,
+      })
+        .sort({ _id: 1 }) // _id includes a timestamp
+        .populate("userId", "name");
+
+      if (displacedUser) {
+        const displacedUserId = displacedUser.userId._id;
+
+        const newNotification = new Notification({
+          userId: displacedUserId,
+          message: `Your slot for "${event.name}" may have been taken due to event reopening.`,
+        });
+
+        await newNotification.save();
+      }
+    }
+
     const newAttendance = new Attendance({
       userId,
       eventId,
+      hasRegistered: event.isReopened ? true : undefined, // ← this ensures `true` if reopened
     });
 
     const savedAttendance = await newAttendance.save();

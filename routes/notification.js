@@ -2,12 +2,33 @@ const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 
-
 const { Notification } = require("../models/notification");
 const { Event } = require("../models/event");
 const { User } = require("../models/user");
 const Organization = require("../models/organization");
 
+router.get("/displacement-status", async (req, res) => {
+  try {
+    const { userId, eventName } = req.query;
+
+    if (!userId || !eventName) {
+      return res
+        .status(400)
+        .json({ error: "userId and eventName are required." });
+    }
+
+    const notif = await Notification.findOne({
+      userId,
+      message: { $regex: `may have been taken`, $options: "i" }, // case-insensitive
+      message: { $regex: eventName, $options: "i" }, // also case-insensitive match to event
+    });
+
+    res.status(200).json({ displaced: !!notif });
+  } catch (err) {
+    console.error("Error checking displacement status:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 router.get("/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -40,9 +61,9 @@ router.put("/:id/read", async (req, res) => {
     }
 
     // Then delete it
-    await Notification.findByIdAndDelete(id);
+    // await Notification.findByIdAndDelete(id);
 
-    res.status(200).json({ message: "Notification read and deleted." });
+    res.status(200).json({ message: "Notification read." });
   } catch (err) {
     console.error("❌ Error marking/deleting notification:", err);
     res.status(500).json({ error: "Server error" });
@@ -69,6 +90,8 @@ router.post("/", async (req, res) => {
   }
 });
 
+// GET /notifications/displacement-status?userId=abc123&eventName=My Event
+
 router.post("/waitlist/open/all", async (req, res) => {
   try {
     const now = new Date();
@@ -89,7 +112,9 @@ router.post("/waitlist/open/all", async (req, res) => {
 
       if (now >= endTime) continue;
 
-      const thirtyMinutesAfterStart = new Date(startTime.getTime() + 30 * 60000);
+      const thirtyMinutesAfterStart = new Date(
+        startTime.getTime() + 30 * 60000
+      );
       const sixtyMinutesAfterStart = new Date(startTime.getTime() + 60 * 60000);
 
       if (now >= thirtyMinutesAfterStart && now < sixtyMinutesAfterStart) {
@@ -181,7 +206,6 @@ router.post("/waitlist/open/all", async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 });
-
 
 // router.delete("/waitlist/cleanup-notifications", async (req, res) => {
 //   try {

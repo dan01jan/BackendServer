@@ -56,14 +56,6 @@ function authJwt() {
                     methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS', 'PATCH']
                 },
                 {
-                    url: /\/api\/v1\/waitlisted(.*)/,
-                    methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS', 'PATCH']
-                },
-                {
-                    url: /\/api\/v1\/waitlisted(.*)/,
-                    methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS', 'PATCH']
-                },
-                {
                     url: /\/api\/v1\/notifications(.*)/,
                     methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS', 'PATCH']
                 },
