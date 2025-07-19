@@ -15,6 +15,7 @@ const client = new OAuth2(
 const cloudinary = require("../utils/cloudinary");
 const uploadOptions = require("../utils/multer");
 const streamifier = require("streamifier");
+const crypto = require("crypto");
 
 // Register User
 router.post("/register", uploadOptions.single("image"), async (req, res) => {
@@ -135,6 +136,88 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
     res.status(500).send("Error processing the user: " + error.message);
   }
 });
+
+// Forgot Password
+router.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" }); // ✅ JSON response
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenExpire = Date.now() + 3600000; // 1 hour
+
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = tokenExpire;
+    await user.save();
+
+    const resetLink = `http://localhost:5173/reset-password/${token}`;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Reset Your Password",
+      html: `<p>You requested a password reset.</p>
+             <p><a href="${resetLink}">Click here to reset</a> or use this link: ${resetLink}</p>
+             <p>This link will expire in 1 hour.</p>`,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    return res.status(200).json({ message: "Password reset link has been sent to your email." }); // ✅ JSON response
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    return res.status(500).json({ message: "Server error" }); // ✅ JSON response
+  }
+});
+
+// Reset Password
+router.post("/reset-password/:token", async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  console.log("🔐 Received reset token:", token);
+  console.log("🔐 Incoming password:", password);
+
+  try {
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      console.log("❌ Token invalid or expired.");
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    console.log("✅ Token valid for user:", user.email);
+
+    const hashedPassword = bcrypt.hashSync(password, 10);
+
+    user.passwordHash = hashedPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    console.log("✅ Password reset successfully for:", user.email);
+    return res.status(200).json({ message: "Password has been reset successfully." });
+  } catch (err) {
+    console.error("🚨 Reset password error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 router.post("/resend-otp", async (req, res) => {
   const { email } = req.body;

@@ -79,6 +79,12 @@ const userSchema = new mongoose.Schema({
   isVerified: { type: Boolean, default: true },
   otp: { type: String },
   otpExpires: { type: Date },
+  resetPasswordToken: {
+    type: String,
+  },
+  resetPasswordExpires: {
+    type: Date,
+  },
 });
 
 userSchema.virtual('id').get(function () {

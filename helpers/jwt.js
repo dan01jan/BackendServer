@@ -64,6 +64,11 @@ function authJwt() {
                     url: new RegExp(`${api}/users/organizations/officers/[a-fA-F0-9]{24}/(approve|decline)`),
                     methods: ['PUT']
                   },
+                {
+                url: new RegExp(`${api}/users/reset-password/[^/]+`),
+                methods: ['POST']
+                },
+
                 
                 // {
                 //     url: new RegExp(`${api}/users/organizations/officers/[a-fA-F0-9]{24}/approve`),
@@ -73,6 +78,8 @@ function authJwt() {
                 `${api}/users`,
                 `${api}/users/`,
                 `${api}/users/login`,
+                `${api}/users/forgot-password`,
+                //`${api}/users/reset-password/:token`,
                 `${api}/users/weblogin`,
                 `${api}/users/email/:email`,
                 `${api}/users/register`,

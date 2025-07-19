@@ -6,6 +6,8 @@ const cors = require("cors");
 const authJwt = require('./helpers/jwt');
 const errorHandler = require('./helpers/error-handler');
 require("dotenv/config");
+require('dotenv').config();
+
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -69,6 +71,9 @@ mongoose
   })
   .then(() => {
     console.log("Database Connection is ready...");
+    console.log('EMAIL_USER:', process.env.EMAIL_USER);
+    console.log('EMAIL_PASS length:', process.env.EMAIL_PASS.length);
+
   })
   .catch((err) => {
     console.log(err);
