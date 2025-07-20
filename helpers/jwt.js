@@ -92,6 +92,10 @@ function authJwt() {
                 `${api}/users/organization/:id/officers/count`,
                 `${api}/organizations/eligible-officers/organizationId`,
                 `${api}/organizations/:id/events`,
+                `${api}/users/mobile/forgot-password`,
+                `${api}/users/reset-password`,
+
+
                 //`${api}/users/organizations/officers/:userId/approve`,
                 //`${api}/users/organizations/officers/:userId/approve`
             ]

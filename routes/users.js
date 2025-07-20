@@ -49,7 +49,7 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
     // Generate a 6-digit OTP and set expiry (10 minutes)
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
-  
+
     // Parse the organization selections from the form data
     let orgSelections = [];
     if (req.body.orgSelections) {
@@ -99,8 +99,7 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
 
     user = await user.save();
 
-    if (!user)
-      return res.status(400).send("The user cannot be created!");
+    if (!user) return res.status(400).send("The user cannot be created!");
 
     // Optionally, send back all organizations (for selection, etc.)
     const organizations = await Organization.find().select("name");
@@ -175,7 +174,9 @@ router.post("/forgot-password", async (req, res) => {
 
     await transporter.sendMail(mailOptions);
 
-    return res.status(200).json({ message: "Password reset link has been sent to your email." }); // ✅ JSON response
+    return res
+      .status(200)
+      .json({ message: "Password reset link has been sent to your email." }); // ✅ JSON response
   } catch (err) {
     console.error("Forgot password error:", err);
     return res.status(500).json({ message: "Server error" }); // ✅ JSON response
@@ -211,57 +212,120 @@ router.post("/reset-password/:token", async (req, res) => {
     await user.save();
 
     console.log("✅ Password reset successfully for:", user.email);
-    return res.status(200).json({ message: "Password has been reset successfully." });
+    return res
+      .status(200)
+      .json({ message: "Password has been reset successfully." });
   } catch (err) {
     console.error("🚨 Reset password error:", err);
     return res.status(500).json({ message: "Server error" });
   }
 });
 
+router.post("/mobile/forgot-password", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res
+      .status(400)
+      .json({ status: false, message: "Email is required." });
+  }
+
+  try {
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ status: false, message: "User not found." });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    user.otp = otp;
+    user.otpExpires = otpExpires;
+    await user.save();
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: `"TUP Support" <${process.env.EMAIL_USER}>`,
+      to: user.email,
+      subject: "Password Reset Code - TUP Account",
+      html: `
+        <p>Hello,</p>
+        <p>Your OTP code to reset your password is:</p>
+        <h2>${otp}</h2>
+        <p>This code will expire in 10 minutes.</p>
+        <br/>
+        <p>If you didn't request a reset, please ignore this email.</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    return res.status(200).json({
+      status: true,
+      message: "OTP sent successfully to your email.",
+    });
+  } catch (error) {
+    console.error("Error sending OTP:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Failed to send OTP: " + error.message,
+    });
+  }
+});
 
 router.post("/resend-otp", async (req, res) => {
   const { email } = req.body;
 
   try {
-      const user = await User.findOne({ email });
+    const user = await User.findOne({ email });
 
-      if (!user) {
-          return res.status(404).send("User not found.");
-      }
+    if (!user) {
+      return res.status(404).send("User not found.");
+    }
 
-      // Generate a new OTP and set expiry (10 minutes)
-      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    // Generate a new OTP and set expiry (10 minutes)
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Update the user's OTP
-      user.otp = newOtp;
-      user.otpExpires = otpExpires;
-      await user.save();
+    // Update the user's OTP
+    user.otp = newOtp;
+    user.otpExpires = otpExpires;
+    await user.save();
 
-      // Set up Nodemailer transporter
-      let transporter = nodemailer.createTransport({
-          service: "gmail",
-          auth: {
-              user: process.env.EMAIL_USER, // Your email
-              pass: process.env.EMAIL_PASS, // Your password
-          },
-      });
+    // Set up Nodemailer transporter
+    let transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER, // Your email
+        pass: process.env.EMAIL_PASS, // Your password
+      },
+    });
 
-      // Define the email with the new OTP
-      const mailOptions = {
-          from: process.env.EMAIL_USER,
-          to: user.email,
-          subject: "Your New OTP Code for TUP Account Verification",
-          html: `<p>Your new OTP code is <b>${newOtp}</b>. It expires in 10 minutes.</p>`,
-      };
+    // Define the email with the new OTP
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Your New OTP Code for TUP Account Verification",
+      html: `<p>Your new OTP code is <b>${newOtp}</b>. It expires in 10 minutes.</p>`,
+    };
 
-      // Send the OTP email
-      await transporter.sendMail(mailOptions);
+    // Send the OTP email
+    await transporter.sendMail(mailOptions);
 
-      res.status(200).json({ message: "OTP has been resent successfully." });
+    res.status(200).json({ message: "OTP has been resent successfully." });
   } catch (error) {
-      console.error("Error resending OTP:", error);
-      res.status(500).send("Error resending OTP: " + error.message);
+    console.error("Error resending OTP:", error);
+    res.status(500).send("Error resending OTP: " + error.message);
   }
 });
 
@@ -285,12 +349,11 @@ router.post("/verify-otp", async (req, res) => {
     }
 
     console.log("Stored OTP in DB:", user.otp);
-    console.log("User isVerified (type & value):", typeof user.isVerified, user.isVerified);
-
-    if (user.isVerified) {
-      console.log("User already verified for email:", email);
-      return res.status(400).send("User is already verified.");
-    }
+    console.log(
+      "User isVerified (type & value):",
+      typeof user.isVerified,
+      user.isVerified
+    );
 
     if (user.otp !== otp) {
       console.log("OTP mismatch: Expected", user.otp, "but got", otp);
@@ -298,7 +361,12 @@ router.post("/verify-otp", async (req, res) => {
     }
 
     if (user.otpExpires < Date.now()) {
-      console.log("OTP has expired. Expiry:", user.otpExpires, "Current:", Date.now());
+      console.log(
+        "OTP has expired. Expiry:",
+        user.otpExpires,
+        "Current:",
+        Date.now()
+      );
       return res.status(400).send("OTP has expired.");
     }
 
@@ -309,11 +377,25 @@ router.post("/verify-otp", async (req, res) => {
     await user.save();
 
     console.log("User verified successfully:", email);
-    res.send("Email verified successfully.");
+    res.send("OTP verified successfully.");
   } catch (error) {
     console.error("Error during OTP verification:", error);
     res.status(500).send("Server error during OTP verification.");
   }
+});
+
+router.post("/reset-password", async (req, res) => {
+  const { email, new_password } = req.body; // ✅ Remove otp from destructuring
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  user.passwordHash = await bcrypt.hash(new_password, 10);
+  await user.save();
+
+  return res.json({ message: "Password has been reset successfully" });
 });
 
 // Get Admin Users (Officer)
@@ -332,9 +414,7 @@ router.get("/officer/:id", async (req, res) => {
     }
 
     if (!officer.isOfficer) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Access denied" });
+      return res.status(403).json({ success: false, message: "Access denied" });
     }
 
     res.status(200).json(officer);
@@ -471,7 +551,7 @@ router.put("/:id", async (req, res) => {
       {
         name: req.body.name,
         email: req.body.email,
-         // passwordHash: newPassword,
+        // passwordHash: newPassword,
         // phone: req.body.phone,
         isOfficer: req.body.isOfficer,
         // isAdmin: req.body.isAdmin,
@@ -677,10 +757,10 @@ router.get("/organizations/officers", async (req, res) => {
                   $and: [
                     { $eq: ["$organizations.organization", "$$orgId"] },
                     { $eq: ["$organizations.role", "Officer"] },
-                    { $eq: ["$organizations.isOfficer", false] }
-                  ]
-                }
-              }
+                    { $eq: ["$organizations.isOfficer", false] },
+                  ],
+                },
+              },
             },
             // Project only the fields needed for the officer.
             {
@@ -690,21 +770,21 @@ router.get("/organizations/officers", async (req, res) => {
                 surname: 1,
                 email: 1,
                 image: 1,
-                department: "$organizations.department"
-              }
-            }
+                department: "$organizations.department",
+              },
+            },
           ],
-          as: "officers"
-        }
+          as: "officers",
+        },
       },
       // Optionally, project only the fields you need from the organization.
       {
         $project: {
           _id: 1,
           name: 1,
-          officers: 1
-        }
-      }
+          officers: 1,
+        },
+      },
     ]);
 
     res.json(organizations);
@@ -722,8 +802,8 @@ router.put("/organizations/officers/:userId/decline", async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "Officer not found." });
     }
-    const membership = user.organizations.find(m =>
-      m.role.toLowerCase() === 'officer'
+    const membership = user.organizations.find(
+      (m) => m.role.toLowerCase() === "officer"
     );
     if (!membership) {
       return res.status(404).json({ error: "Officer membership not found." });
@@ -764,9 +844,10 @@ router.put("/organizations/officers/:userId/approve", async (req, res) => {
     }
 
     // ✅ Find existing membership
-    let membership = user.organizations.find(m =>
-      m.organization.toString() === organization._id.toString() &&
-      m.role === "Officer"
+    let membership = user.organizations.find(
+      (m) =>
+        m.organization.toString() === organization._id.toString() &&
+        m.role === "Officer"
     );
 
     if (!membership) {
@@ -775,7 +856,7 @@ router.put("/organizations/officers/:userId/approve", async (req, res) => {
         organization: organization._id,
         department: organization.department,
         role: "Officer",
-        position: '',
+        position: "",
         isOfficer: true,
       };
       user.organizations.push(membership);
@@ -790,15 +871,15 @@ router.put("/organizations/officers/:userId/approve", async (req, res) => {
     const officerDetails = {
       userId: user._id,
       name: user.name,
-      image: user.image || '',
+      image: user.image || "",
     };
 
     if (membership.position) {
       officerDetails.position = membership.position;
     }
 
-    const officerExists = organization.officers.some(officer =>
-      officer.userId.toString() === user._id.toString()
+    const officerExists = organization.officers.some(
+      (officer) => officer.userId.toString() === user._id.toString()
     );
 
     if (!officerExists) {
@@ -838,7 +919,6 @@ router.get("/organization/:id/count", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 // Count officer users for a specific organization
 // Count officer users for a specific organization
