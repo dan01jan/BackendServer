@@ -224,23 +224,16 @@ router.post("/reset-password/:token", async (req, res) => {
 router.post("/mobile/forgot-password", async (req, res) => {
   const { email } = req.body;
 
-  console.log("Incoming forgot password request:", email);
-
   if (!email) {
-    console.log("Email not provided.");
     return res
       .status(400)
       .json({ status: false, message: "Email is required." });
   }
 
   try {
-    const normalizedEmail = email.trim().toLowerCase();
-    console.log("Looking for user with email:", normalizedEmail);
-
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
 
     if (!user) {
-      console.log("User not found for email:", normalizedEmail);
       return res
         .status(404)
         .json({ status: false, message: "User not found." });
@@ -249,34 +242,17 @@ router.post("/mobile/forgot-password", async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    console.log(`Generated OTP for ${normalizedEmail}:`, otp);
-    console.log("OTP Expires at:", otpExpires.toISOString());
-
     user.otp = otp;
     user.otpExpires = otpExpires;
     await user.save();
 
-    console.log("Saved OTP to user record.");
-
-    // const transporter = nodemailer.createTransport({
-    //   service: "gmail",
-    //   auth: {
-    //     user: process.env.EMAIL_USER,
-    //     pass: process.env.EMAIL_PASS,
-    //   },
-    // });
-
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465, // or 587 if TLS
-      secure: true, // use TLS
+      service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
     });
-
-    console.log("Email transporter created.");
 
     const mailOptions = {
       from: `"TUP Support" <${process.env.EMAIL_USER}>`,
@@ -292,16 +268,14 @@ router.post("/mobile/forgot-password", async (req, res) => {
       `,
     };
 
-    console.log("Sending email to:", user.email);
     await transporter.sendMail(mailOptions);
 
-    console.log("OTP email sent successfully.");
     return res.status(200).json({
       status: true,
       message: "OTP sent successfully to your email.",
     });
   } catch (error) {
-    console.error("Error during forgot password process:", error);
+    console.error("Error sending OTP:", error);
     return res.status(500).json({
       status: false,
       message: "Failed to send OTP: " + error.message,
