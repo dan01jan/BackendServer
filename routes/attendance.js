@@ -68,6 +68,36 @@ router.put("/mark-unregistered/:id", async (req, res) => {
   }
 });
 
+router.put("/make-admin/:id", async (req, res) => {
+  const userId = req.params.id;
+
+  try {
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { isAdmin: true },
+      { new: true } // return the updated document
+    );
+
+    if (!updatedUser) {
+      return res
+        .status(404)
+        .json({ status: false, message: "User not found." });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: "User updated to admin successfully.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Error updating user to admin:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error.",
+    });
+  }
+});
+
 router.get("/count", async (req, res) => {
   try {
     const { eventId } = req.query;
